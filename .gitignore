@@ -15,8 +15,8 @@ yarn-error.log*
 # 📱 APP (React Native / Android)
 # ========================
 # Android Build
-android/app/build/
-android/.gradle/
+# android/app/build/
+# android/.gradle/
 android/local.properties
 *.iml
 

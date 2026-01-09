@@ -9,7 +9,6 @@ import { UserProvider } from '../context/UserContext';
 import { ContactProvider } from '../context/ContactContext'; 
 import { SyncService } from '../services/SyncService'; 
 
-// 🟢 SAFE MODULE ACCESS
 const { CallManagerModule } = NativeModules;
 
 export default function RootLayout() {
@@ -18,7 +17,6 @@ export default function RootLayout() {
 
   // 🟢 1. GLOBAL CALL HANDLING
   useEffect(() => {
-    // 🟢 SAFEGUARD: Stop immediately if module is missing (prevents crash on old builds)
     if (!CallManagerModule) {
         console.warn("⚠️ CallManagerModule not linked. Skipping native listeners.");
         return;
@@ -31,13 +29,11 @@ export default function RootLayout() {
       handleCallEvent(data);
     });
 
-    // CHECKER: Handles events when app OPENS/RESUMES (e.g. tapping notification)
+    // CHECKER: Handles events when app OPENS/RESUMES
     const checkStatus = async () => {
-      // 🟢 DEFENSIVE CHECK: Ensure method exists
       if (Platform.OS === 'android' && CallManagerModule?.getActiveCallInfo) {
         try {
           const data = await CallManagerModule.getActiveCallInfo();
-          // Valid statuses to redirect: 'Incoming', 'Active', 'Dialing'
           if (data && (data.status === 'Incoming' || data.status === 'Active' || data.status === 'Dialing')) {
              handleCallEvent(data);
           }
@@ -47,10 +43,8 @@ export default function RootLayout() {
       }
     };
 
-    // Run check immediately on mount
     checkStatus();
 
-    // Run check whenever app comes to foreground
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         checkStatus();
@@ -63,13 +57,13 @@ export default function RootLayout() {
     };
   }, [segments]); 
 
-  // 🟢 Helper to handle navigation safely
+  // 🟢 HELPER: Handle Navigation & State
   const handleCallEvent = (data: any) => {
       console.log("⚡ Call Event Detected:", data.status);
       
-      // Get current route safely
       const currentRoute = segments.length > 0 ? segments[segments.length - 1] : 'unknown';
 
+      // CASE 1: INCOMING CALL
       if (data.status === 'Incoming') {
         if (currentRoute !== 'incoming') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -79,15 +73,31 @@ export default function RootLayout() {
           });
         }
       } 
+      
+      // CASE 2: ACTIVE CALL (Answered)
+      // This fixes the "Ghost UI" by forcibly replacing the incoming screen
       else if (data.status === 'Active' || data.status === 'Dialing') {
-        // Redirect to outgoing if we aren't already there
         if (currentRoute !== 'outgoing') {
           console.log("📞 Redirecting to Outgoing Screen...");
-          // Use replace to prevent back button from going back to 'Dialing' state
+          
+          // Use REPLACE to kill the Incoming modal if it's open
           router.replace({
             pathname: '/outgoing',
             params: { number: data.number, name: data.name || 'Unknown', status: data.status }
           });
+        }
+      }
+
+      // CASE 3: DISCONNECTED (Call Ended)
+      // This ensures the screen closes if the other person hangs up
+      else if (data.status === 'Disconnected') {
+        if (currentRoute === 'incoming' || currentRoute === 'outgoing') {
+           console.log("📴 Call Ended. Returning to home.");
+           // Dismiss triggers the unmount of the screen, which should stop the Ringtone (if handled in useEffect cleanup)
+           if (router.canDismiss()) {
+             router.dismissAll();
+           }
+           router.replace('/'); 
         }
       }
   };
@@ -110,20 +120,19 @@ export default function RootLayout() {
       <ContactProvider> 
         <SafeAreaProvider>
           <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-            {/* Main Application Flow */}
             <Stack.Screen name="index" />
             <Stack.Screen name="login" />
             <Stack.Screen name="otp" />
             <Stack.Screen name="register" />
             <Stack.Screen name="(tabs)" />
             
-            {/* Call Screens (Modals) */}
+            {/* Call Screens */}
             <Stack.Screen 
               name="incoming" 
               options={{ 
                 presentation: 'transparentModal', 
                 gestureEnabled: false,
-                animation: 'none' // Instant appearance for calls
+                animation: 'none' 
               }} 
             />
             <Stack.Screen 

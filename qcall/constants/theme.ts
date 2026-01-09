@@ -5,28 +5,68 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// ------------------------------------------------------------
+// 1. YOUR CUSTOM PALETTE
+// ------------------------------------------------------------
+const palette = {
+  cream: '#FFF5E9',      // Background
+  peach: '#FFD7A8',      // User Bubble / Secondary
+  white: '#FFFFFF',      // Bot Bubble / Cards
+  orange: '#D66F2C',     // Primary Brand Text
+  green: '#00A34A',      // Success
+  black: '#000000',      // Primary Action
+  darkGrey: '#2D2D2D',   // Main Text
+  red: '#FF4B4B',        // Error / Hang up
+  
+  // Dark mode specific (Optional, for better contrast)
+  darkBackground: '#1A1A1A',
+  darkCard: '#2C2C2C',
+};
 
+const tintColorLight = palette.orange;
+const tintColorDark = palette.orange; // Keep brand color in dark mode too
+
+// ------------------------------------------------------------
+// 2. UPDATED COLORS OBJECT
+// ------------------------------------------------------------
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: palette.darkGrey,
+    background: palette.cream, // The creamy warm white you wanted
     tint: tintColorLight,
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+    
+    // Custom Brand Colors
+    primary: palette.orange,
+    secondary: palette.peach,
+    card: palette.white,
+    success: palette.green,
+    error: palette.red,
+    border: palette.peach, 
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: palette.darkBackground, // Dark grey for night mode
     tint: tintColorDark,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
+
+    // Custom Brand Colors (Dark Mode variations)
+    primary: palette.orange, // Orange still pops nicely on black
+    secondary: '#4A3B32',    // Darker version of peach
+    card: palette.darkCard,
+    success: palette.green,
+    error: palette.red,
+    border: '#444',
   },
 };
 
+// ------------------------------------------------------------
+// 3. FONTS (KEPT EXACTLY AS IS)
+// ------------------------------------------------------------
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

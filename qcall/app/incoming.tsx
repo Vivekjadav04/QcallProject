@@ -210,20 +210,20 @@ export default function IncomingCallScreen() {
 
         <View style={styles.bottomSection}>
            <BlurView intensity={info.isSpam ? 20 : 60} tint={info.isSpam ? "dark" : "light"} style={styles.glassPanel}>
-              
-              <View style={styles.actionGroup}>
-                <TouchableOpacity style={[styles.controlBtn, styles.btnDecline]} onPress={handleDecline}>
-                   <MaterialIcons name="call-end" size={32} color="#FFF" />
-                </TouchableOpacity>
-                <Text style={styles.btnLabel}>Decline</Text>
-              </View>
+             
+             <View style={styles.actionGroup}>
+               <TouchableOpacity style={[styles.controlBtn, styles.btnDecline]} onPress={handleDecline}>
+                  <MaterialIcons name="call-end" size={32} color="#FFF" />
+               </TouchableOpacity>
+               <Text style={styles.btnLabel}>Decline</Text>
+             </View>
 
-              <View style={styles.actionGroup}>
-                <TouchableOpacity style={[styles.controlBtn, styles.btnAccept]} onPress={handleAnswer}>
-                   <MaterialIcons name="call" size={32} color="#FFF" />
-                </TouchableOpacity>
-                <Text style={styles.btnLabel}>Accept</Text>
-              </View>
+             <View style={styles.actionGroup}>
+               <TouchableOpacity style={[styles.controlBtn, styles.btnAccept]} onPress={handleAnswer}>
+                  <MaterialIcons name="call" size={32} color="#FFF" />
+               </TouchableOpacity>
+               <Text style={styles.btnLabel}>Accept</Text>
+             </View>
 
            </BlurView>
         </View>

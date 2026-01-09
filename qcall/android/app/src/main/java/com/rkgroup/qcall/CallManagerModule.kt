@@ -15,15 +15,15 @@ import com.rkgroup.qcall.native_telephony.QCallInCallService
 
 class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    private val reactContext: ReactApplicationContext = reactContext
     private val TAG = "QCallDebug"
 
+    // 🟢 1. Companion Object to allow Receiver to talk to JS
     companion object {
-        var reactContext: ReactApplicationContext? = null
+        var reactAppContext: ReactApplicationContext? = null
 
         fun sendEvent(eventName: String, params: WritableMap?) {
             try {
-                reactContext
+                reactAppContext
                     ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                     ?.emit(eventName, params)
             } catch (e: Exception) {
@@ -33,12 +33,12 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     }
 
     init {
-        Companion.reactContext = reactContext
+        reactAppContext = reactContext
     }
 
     override fun getName(): String = "CallManagerModule"
 
-    // 🟢 1. ANSWER CALL
+    // 🟢 2. ANSWER CALL
     @ReactMethod
     fun answerCall() {
         Log.d(TAG, "Attempting to answer call...")
@@ -54,7 +54,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    // 🟢 2. END CALL
+    // 🟢 3. END CALL
     @ReactMethod
     fun endCall() {
         Log.d(TAG, "Attempting to end call...")
@@ -72,7 +72,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    // 🟢 3. START CALL (Fixed currentActivity error)
+    // 🟢 4. START CALL
     @ReactMethod
     fun startCall(number: String) {
         Log.d(TAG, "Starting call to: $number")
@@ -81,23 +81,23 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             val intent = Intent(Intent.ACTION_CALL, uri)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             
-            // 🟢 FIX: Use getCurrentActivity() method instead of property
-            val activity = getCurrentActivity()
+            // FIX: Kotlin property access for currentActivity
+            val activity = currentActivity 
             if (activity != null) {
                 activity.startActivity(intent)
             } else {
-                reactContext.startActivity(intent)
+                reactApplicationContext.startActivity(intent)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error starting call: ${e.message}")
         }
     }
 
-    // 🟢 4. AUDIO CONTROLS
+    // 🟢 5. AUDIO CONTROLS
     @ReactMethod
     fun setMuted(muted: Boolean) {
         try {
-            val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.isMicrophoneMute = muted
         } catch (e: Exception) {
             Log.e(TAG, "Error setting mute: ${e.message}")
@@ -107,14 +107,14 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun setSpeakerphoneOn(on: Boolean) {
         try {
-            val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.isSpeakerphoneOn = on
         } catch (e: Exception) {
             Log.e(TAG, "Error setting speaker: ${e.message}")
         }
     }
 
-    // 🟢 5. GET STATUS
+    // 🟢 6. GET STATUS (Unified Logic)
     @ReactMethod
     fun getCurrentCallStatus(promise: Promise) {
         val call = QCallInCallService.currentCall
@@ -140,17 +140,23 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         promise.resolve(map)
     }
 
-    // 🟢 6. DEFAULT DIALER LOGIC
+    // 🟢 7. GET ACTIVE CALL INFO (Alias for compatibility)
+    @ReactMethod
+    fun getActiveCallInfo(promise: Promise) {
+        getCurrentCallStatus(promise)
+    }
+
+    // 🟢 8. DEFAULT DIALER CHECKS
     @ReactMethod
     fun checkIsDefaultDialer(promise: Promise) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val roleManager = reactContext.getSystemService(Context.ROLE_SERVICE) as RoleManager
+                val roleManager = reactApplicationContext.getSystemService(Context.ROLE_SERVICE) as RoleManager
                 val isDefault = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
                 promise.resolve(isDefault)
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val telecomManager = reactContext.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
-                val isDefault = telecomManager.defaultDialerPackage == reactContext.packageName
+                val telecomManager = reactApplicationContext.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+                val isDefault = telecomManager.defaultDialerPackage == reactApplicationContext.packageName
                 promise.resolve(isDefault)
             } else {
                 promise.resolve(true)
@@ -166,14 +172,14 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         try {
             val intent: Intent? = when {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> {
-                    val roleManager = reactContext.getSystemService(Context.ROLE_SERVICE) as RoleManager
+                    val roleManager = reactApplicationContext.getSystemService(Context.ROLE_SERVICE) as RoleManager
                     if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
                         roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
                     } else null
                 }
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
                     Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER).apply {
-                        putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, reactContext.packageName)
+                        putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, reactApplicationContext.packageName)
                     }
                 }
                 else -> null
@@ -181,13 +187,11 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
             if (intent != null) {
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                
-                // 🟢 FIX: Use getCurrentActivity() method here too
-                val activity = getCurrentActivity()
+                val activity = currentActivity
                 if (activity != null) {
                     activity.startActivity(intent)
                 } else {
-                    reactContext.startActivity(intent)
+                    reactApplicationContext.startActivity(intent)
                 }
                 promise.resolve(true)
             } else {
@@ -197,13 +201,8 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             promise.reject("ERROR", e.message)
         }
     }
-    
-    // 🟢 7. GET ACTIVE CALL INFO (Duplicate of getCurrentCallStatus)
-    @ReactMethod
-    fun getActiveCallInfo(promise: Promise) {
-        getCurrentCallStatus(promise)
-    }
 
+    // 🟢 9. Required for NativeEventEmitter
     @ReactMethod
     fun addListener(eventName: String) {}
 

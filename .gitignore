@@ -17,7 +17,7 @@ yarn-error.log*
 # Android Build
 # android/app/build/
 # android/.gradle/
-android/local.properties
+# android/local.properties
 *.iml
 
 # Security (NEVER UPLOAD THESE)

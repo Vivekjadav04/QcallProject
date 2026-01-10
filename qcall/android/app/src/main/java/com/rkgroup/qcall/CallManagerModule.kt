@@ -1,5 +1,6 @@
 package com.rkgroup.qcall
 
+import android.app.Activity
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
@@ -17,7 +18,6 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
     private val TAG = "QCallDebug"
 
-    // 🟢 1. Companion Object to allow Receiver to talk to JS
     companion object {
         var reactAppContext: ReactApplicationContext? = null
 
@@ -81,8 +81,9 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             val intent = Intent(Intent.ACTION_CALL, uri)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             
-            // FIX: Kotlin property access for currentActivity
-            val activity = currentActivity 
+            // 🟢 FIX: Use getCurrentActivity() as a function call
+            val activity: Activity? = getCurrentActivity()
+            
             if (activity != null) {
                 activity.startActivity(intent)
             } else {
@@ -114,7 +115,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    // 🟢 6. GET STATUS (Unified Logic)
+    // 🟢 6. GET STATUS
     @ReactMethod
     fun getCurrentCallStatus(promise: Promise) {
         val call = QCallInCallService.currentCall
@@ -132,15 +133,13 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             map.putString("status", status)
             map.putString("name", QCallInCallService.lastCallerName)
             map.putString("number", QCallInCallService.lastCallerNumber)
-            
-            Log.d(TAG, "Status requested: $status")
         } else {
             map.putString("status", "Idle")
         }
         promise.resolve(map)
     }
 
-    // 🟢 7. GET ACTIVE CALL INFO (Alias for compatibility)
+    // 🟢 7. GET ACTIVE CALL INFO
     @ReactMethod
     fun getActiveCallInfo(promise: Promise) {
         getCurrentCallStatus(promise)
@@ -187,7 +186,10 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
             if (intent != null) {
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                val activity = currentActivity
+                
+                // 🟢 FIX: Use getCurrentActivity() as a function call
+                val activity: Activity? = getCurrentActivity()
+                
                 if (activity != null) {
                     activity.startActivity(intent)
                 } else {
@@ -202,7 +204,6 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    // 🟢 9. Required for NativeEventEmitter
     @ReactMethod
     fun addListener(eventName: String) {}
 

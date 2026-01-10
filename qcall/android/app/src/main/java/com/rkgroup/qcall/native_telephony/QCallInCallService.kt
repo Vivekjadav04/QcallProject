@@ -3,80 +3,85 @@ package com.rkgroup.qcall.native_telephony
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+// 🟢 ADDED MISSING IMPORT:
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.telecom.Call
+import android.telecom.CallAudioState
 import android.telecom.InCallService
-import android.util.Log
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
-import com.facebook.react.bridge.Arguments
-import com.rkgroup.qcall.CallManagerModule
-import com.rkgroup.qcall.MainActivity
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.rkgroup.qcall.IncomingCallActivity
+import com.rkgroup.qcall.OngoingCallActivity
 import com.rkgroup.qcall.R
 
 class QCallInCallService : InCallService() {
 
-    private val TAG = "QCallService"
-
     companion object {
-        // 🟢 UPDATED CHANNEL ID: Forces Android to reset sound settings
-        const val CHANNEL_ID = "qcall_ringing_channel_v3"
-        const val NOTIFICATION_ID = 888
-        
-        // 🟢 PUBLIC ACCESS: Critical for CallManagerModule to work
+        const val CHANNEL_ID = "qcall_native_v10"
+        const val NOTIFICATION_ID = 999
         var currentCall: Call? = null
-        var lastCallerName: String = "Unknown"
-        var lastCallerNumber: String = ""
+        var lastCallerName = "Unknown"
+        var lastCallerNumber = ""
+        var callStartTime: Long = 0 
+
+        private var activeRingtone: Ringtone? = null
+        var instance: QCallInCallService? = null
+
+        fun stopRingtone() {
+            try { if (activeRingtone?.isPlaying == true) activeRingtone?.stop() } catch (e: Exception) {}
+        }
+
+        fun toggleSpeaker(enable: Boolean) {
+            val service = instance ?: return
+            service.setAudioRoute(if (enable) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
+        }
     }
+
+    override fun onCreate() { super.onCreate(); instance = this }
+    override fun onDestroy() { super.onDestroy(); instance = null }
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
         currentCall = call
-        
         val handle = call.details.handle
         val number = handle?.schemeSpecificPart ?: "Unknown"
-
-        try {
-            lastCallerName = getContactName(this, number)
-            lastCallerNumber = number
-        } catch (e: Exception) {
-            lastCallerName = "Unknown"
-        }
-
-        val params = Arguments.createMap()
-        params.putString("number", number)
-        params.putString("name", lastCallerName)
+        lastCallerNumber = number
+        lastCallerName = getContactName(this, number)
+        callStartTime = 0 // Reset timer
 
         if (call.state == Call.STATE_RINGING) {
-            params.putString("status", "Incoming")
+            startRinging()
             showNotification(number, lastCallerName, true)
         } else {
-            params.putString("status", "Dialing")
-            // 🟢 FORCE APP FRONT (Uses Deep Link for Speed)
-            bringAppToForeground(number, lastCallerName)
+            launchOngoingScreen(number, lastCallerName, "Dialing")
             showNotification(number, lastCallerName, false)
         }
-        
-        CallManagerModule.sendEvent("onCallStateChanged", params)
 
         call.registerCallback(object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) {
-                val updateParams = Arguments.createMap()
-                when (state) {
-                    Call.STATE_ACTIVE -> {
-                        updateParams.putString("status", "Active")
-                        CallManagerModule.sendEvent("onCallStateChanged", updateParams)
-                    }
-                    Call.STATE_DISCONNECTED -> {
-                        updateParams.putString("status", "Disconnected")
-                        CallManagerModule.sendEvent("onCallStateChanged", updateParams)
-                        removeNotification()
-                        currentCall = null // Cleanup
-                    }
+                if (state == Call.STATE_ACTIVE) {
+                    stopRingtone()
+                    
+                    if (callStartTime == 0L) callStartTime = System.currentTimeMillis()
+                    
+                    val intent = Intent("ACTION_CALL_ACTIVE")
+                    LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+                    
+                    showNotification(lastCallerNumber, lastCallerName, false)
+                } 
+                else if (state == Call.STATE_DISCONNECTED) {
+                    stopRingtone()
+                    callStartTime = 0
+                    val intent = Intent("ACTION_CALL_ENDED")
+                    LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+                    val nm = getSystemService(NotificationManager::class.java)
+                    nm.cancel(NOTIFICATION_ID)
                 }
             }
         })
@@ -84,109 +89,84 @@ class QCallInCallService : InCallService() {
 
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
+        stopRingtone()
         currentCall = null
-        removeNotification()
-        val params = Arguments.createMap()
-        params.putString("status", "Disconnected")
-        CallManagerModule.sendEvent("onCallStateChanged", params)
+        val intent = Intent("ACTION_CALL_ENDED")
+        LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.cancel(NOTIFICATION_ID)
     }
 
-    // 🟢 UPDATED: Uses Deep Link URI for INSTANT UI detection in Expo Router
-    private fun bringAppToForeground(number: String, name: String) {
-        try {
-            val safeName = Uri.encode(name)
-            val safeNumber = Uri.encode(number)
-            
-            // Deep Link directly to outgoing screen
-            val deepLink = Uri.parse("qcall://outgoing?number=$safeNumber&name=$safeName&status=Dialing")
-
-            val intent = Intent(Intent.ACTION_VIEW, deepLink, this, MainActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error forcing app to front: ${e.message}")
-        }
+    private fun launchOngoingScreen(number: String, name: String, status: String) {
+        val intent = Intent(this, OngoingCallActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT) 
+        intent.putExtra("CALLER_NAME", name)
+        intent.putExtra("CALLER_NUMBER", number)
+        intent.putExtra("STATUS", status)
+        startActivity(intent)
     }
 
-    private fun removeNotification() {
+    private fun startRinging() {
         try {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.cancel(NOTIFICATION_ID)
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            activeRingtone = RingtoneManager.getRingtone(applicationContext, uri)
+            activeRingtone?.play()
         } catch (e: Exception) {}
     }
 
     private fun showNotification(number: String, name: String, isIncoming: Boolean) {
-        createNotificationChannel()
+        createChannel()
         
-        // 🟢 UPDATED: Deep Link intent for Notification Tap
-        val safeName = Uri.encode(name)
-        val safeNumber = Uri.encode(number)
-        val route = if (isIncoming) "incoming" else "outgoing"
-        val status = if (isIncoming) "Incoming" else "Dialing"
+        val targetClass = if (isIncoming) IncomingCallActivity::class.java else OngoingCallActivity::class.java
+        val fullScreenIntent = Intent(this, targetClass).apply {
+            putExtra("CALLER_NAME", name)
+            putExtra("CALLER_NUMBER", number)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(this, 0, fullScreenIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+        val customLayout = RemoteViews(packageName, R.layout.notification_custom)
+        customLayout.setTextViewText(R.id.notif_name, if (name != "Unknown") name else number)
+        customLayout.setTextViewText(R.id.notif_status, if (isIncoming) "Incoming Call" else "Call in Progress")
+
+        if (isIncoming) {
+            val acceptIntent = Intent(this, OngoingCallActivity::class.java).apply {
+                putExtra("CALLER_NAME", name)
+                putExtra("CALLER_NUMBER", number)
+                putExtra("STATUS", "Active")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val acceptPending = PendingIntent.getActivity(this, 1, acceptIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            customLayout.setOnClickPendingIntent(R.id.notif_btn_accept, acceptPending)
+        }
         
-        val deepLink = Uri.parse("qcall://$route?number=$safeNumber&name=$safeName&status=$status")
-        
-        val intent = Intent(Intent.ACTION_VIEW, deepLink, this, MainActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val declineIntent = Intent(this, NotificationActionReceiver::class.java).apply { action = "ACTION_DECLINE" }
+        val declinePending = PendingIntent.getBroadcast(this, 2, declineIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        customLayout.setOnClickPendingIntent(R.id.notif_btn_decline, declinePending)
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(if (name != "Unknown") name else number)
-            .setContentText(if (isIncoming) "Incoming Call" else "Call in progress")
+            .setCustomContentView(customLayout)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
-            .setContentIntent(pendingIntent)
             .setFullScreenIntent(pendingIntent, true)
+            .setContentIntent(pendingIntent)
             .setAutoCancel(false)
-
-        // 🟢 ADD SOUND & VIBRATION
-        if (isIncoming) {
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            builder.setSound(soundUri)
-            builder.setVibrate(longArrayOf(0, 1000, 500, 1000))
-
-            val acceptIntent = Intent(this, NotificationActionReceiver::class.java).apply { action = "ACTION_ACCEPT" }
-            val acceptPending = PendingIntent.getBroadcast(this, 1, acceptIntent, PendingIntent.FLAG_IMMUTABLE)
-            val declineIntent = Intent(this, NotificationActionReceiver::class.java).apply { action = "ACTION_DECLINE" }
-            val declinePending = PendingIntent.getBroadcast(this, 2, declineIntent, PendingIntent.FLAG_IMMUTABLE)
-            
-            builder.addAction(android.R.drawable.ic_menu_call, "Accept", acceptPending)
-            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declinePending)
-        }
 
         startForeground(NOTIFICATION_ID, builder.build())
     }
 
-    // 🟢 UPDATED: Forces Ringtone Audio Attributes
-    private fun createNotificationChannel() {
+    private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java)
-            if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-                val channel = NotificationChannel(CHANNEL_ID, "Incoming Calls", NotificationManager.IMPORTANCE_HIGH)
-                
-                // Set Sound Attributes correctly
-                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                val audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-
-                channel.setSound(soundUri, audioAttributes)
-                channel.enableVibration(true)
-                channel.vibrationPattern = longArrayOf(0, 1000, 500, 1000)
-                channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-                
-                nm.createNotificationChannel(channel)
-            }
+            val channel = NotificationChannel(CHANNEL_ID, "Calls", NotificationManager.IMPORTANCE_HIGH)
+            channel.setSound(null, null)
+            nm.createNotificationChannel(channel)
         }
     }
-
+    
     private fun getContactName(context: Context, phoneNumber: String?): String {
         if (phoneNumber.isNullOrEmpty()) return "Unknown"
         val uri = Uri.withAppendedPath(android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))

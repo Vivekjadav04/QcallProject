@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { AppState, NativeModules, Platform, NativeEventEmitter } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, NativeModules, Platform, NativeEventEmitter, View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,46 +9,43 @@ import { UserProvider } from '../context/UserContext';
 import { ContactProvider } from '../context/ContactContext'; 
 import { SyncService } from '../services/SyncService'; 
 
+// 🟢 1. IMPORT YOUR NEW NOTIFICATION COMPONENT
+import IncomingCallNotification from '../components/IncomingCallNotification';
+
 const { CallManagerModule } = NativeModules;
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments(); 
 
-  // 🟢 1. GLOBAL CALL HANDLING
+  // 🟢 2. ADD STATE TO CONTROL THE NOTIFICATION
+  const [incomingCall, setIncomingCall] = useState<{ number: string, name: string } | null>(null);
+
   useEffect(() => {
     if (!CallManagerModule) {
-        console.warn("⚠️ CallManagerModule not linked. Skipping native listeners.");
+        console.warn("⚠️ CallManagerModule not linked.");
         return;
     }
 
     const eventEmitter = new NativeEventEmitter(CallManagerModule);
     
-    // LISTENER: Handles events while app is OPEN
     const subscription = eventEmitter.addListener('onCallStateChanged', (data) => {
       handleCallEvent(data);
     });
 
-    // CHECKER: Handles events when app OPENS/RESUMES
     const checkStatus = async () => {
       if (Platform.OS === 'android' && CallManagerModule?.getActiveCallInfo) {
         try {
           const data = await CallManagerModule.getActiveCallInfo();
-          if (data && (data.status === 'Incoming' || data.status === 'Active' || data.status === 'Dialing')) {
-             handleCallEvent(data);
-          }
-        } catch (e) {
-          console.warn("Sync failed:", e);
-        }
+          if (data) handleCallEvent(data);
+        } catch (e) { console.warn(e); }
       }
     };
 
     checkStatus();
 
     const appStateSub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        checkStatus();
-      }
+      if (nextState === 'active') checkStatus();
     });
 
     return () => {
@@ -57,93 +54,70 @@ export default function RootLayout() {
     };
   }, [segments]); 
 
-  // 🟢 HELPER: Handle Navigation & State
   const handleCallEvent = (data: any) => {
-      console.log("⚡ Call Event Detected:", data.status);
+      console.log("⚡ Call Event:", data.status);
       
-      const currentRoute = segments.length > 0 ? segments[segments.length - 1] : 'unknown';
-
-      // CASE 1: INCOMING CALL
       if (data.status === 'Incoming') {
-        if (currentRoute !== 'incoming') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          router.push({ 
-            pathname: '/incoming', 
-            params: { number: data.number, name: data.name || 'Unknown' } 
-          });
-        }
+        // 🟢 3. SHOW NOTIFICATION INSTEAD OF NAVIGATING
+        setIncomingCall({ 
+          number: data.number, 
+          name: data.name || 'Unknown' 
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       } 
-      
-      // CASE 2: ACTIVE CALL (Answered)
-      // This fixes the "Ghost UI" by forcibly replacing the incoming screen
       else if (data.status === 'Active' || data.status === 'Dialing') {
+        // 🟢 4. HIDE NOTIFICATION ON ANSWER
+        setIncomingCall(null);
+        
+        // Navigate to Outgoing/Active screen
+        const currentRoute = segments.length > 0 ? segments[segments.length - 1] : 'unknown';
         if (currentRoute !== 'outgoing') {
-          console.log("📞 Redirecting to Outgoing Screen...");
-          
-          // Use REPLACE to kill the Incoming modal if it's open
-          router.replace({
-            pathname: '/outgoing',
-            params: { number: data.number, name: data.name || 'Unknown', status: data.status }
-          });
+            router.replace({
+                pathname: '/outgoing',
+                params: { number: data.number, name: data.name || 'Unknown', status: data.status }
+            });
         }
       }
-
-      // CASE 3: DISCONNECTED (Call Ended)
-      // This ensures the screen closes if the other person hangs up
       else if (data.status === 'Disconnected') {
-        if (currentRoute === 'incoming' || currentRoute === 'outgoing') {
-           console.log("📴 Call Ended. Returning to home.");
-           // Dismiss triggers the unmount of the screen, which should stop the Ringtone (if handled in useEffect cleanup)
-           if (router.canDismiss()) {
-             router.dismissAll();
-           }
-           router.replace('/'); 
-        }
+        // 🟢 5. HIDE NOTIFICATION ON HANGUP
+        setIncomingCall(null);
+        if (router.canDismiss()) router.dismissAll();
+        router.replace('/(tabs)');
       }
   };
 
-  // 🟢 2. DATA SYNC
-  useEffect(() => {
-    try {
-        SyncService.startSync();
-        const appStateSub = AppState.addEventListener('change', (nextState) => {
-          if (nextState === 'active') SyncService.startSync();
-        });
-        return () => appStateSub.remove();
-    } catch (err) {
-        console.log("Sync Error:", err);
-    }
-  }, []);
+  // 🟢 6. BUTTON HANDLERS
+  const handleAccept = () => {
+    CallManagerModule.answerCall();
+    setIncomingCall(null);
+  };
+
+  const handleDecline = () => {
+    CallManagerModule.endCall();
+    setIncomingCall(null);
+  };
 
   return (
     <UserProvider>
       <ContactProvider> 
         <SafeAreaProvider>
-          <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="otp" />
-            <Stack.Screen name="register" />
-            <Stack.Screen name="(tabs)" />
-            
-            {/* Call Screens */}
-            <Stack.Screen 
-              name="incoming" 
-              options={{ 
-                presentation: 'transparentModal', 
-                gestureEnabled: false,
-                animation: 'none' 
-              }} 
+          <View style={{ flex: 1 }}>
+            <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="outgoing" options={{ presentation: 'fullScreenModal' }}/>
+              {/* We don't need 'incoming' screen anymore */}
+            </Stack>
+
+            {/* 🟢 7. RENDER THE NOTIFICATION COMPONENT ON TOP */}
+            <IncomingCallNotification 
+              visible={!!incomingCall}
+              callerName={incomingCall?.name || 'Unknown'}
+              phoneNumber={incomingCall?.number || ''}
+              onAccept={handleAccept}
+              onDecline={handleDecline}
             />
-            <Stack.Screen 
-              name="outgoing" 
-              options={{ 
-                presentation: 'fullScreenModal', 
-                gestureEnabled: false,
-                animation: 'fade' 
-              }}
-            />
-          </Stack>
+
+          </View>
         </SafeAreaProvider>
       </ContactProvider>
     </UserProvider>

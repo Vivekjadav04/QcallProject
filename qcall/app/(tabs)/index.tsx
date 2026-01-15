@@ -133,7 +133,7 @@ const DebugButtons = ({ router }: { router: any }) => (
         style={[styles.debugBtn, { backgroundColor: THEME.colors.primary }]}
         onPress={() => router.push({ 
           pathname: '/outgoing', 
-          params: { name: 'Mark Zuckerberg', number: '+1 (555) 123-4567', status: 'Dialing' } 
+          params: { name: 'Mark Zuckerberg', number: '198', status: 'Dialing' } 
         })}
       >
         <Feather name="phone-outgoing" size={16} color="#FFF" />

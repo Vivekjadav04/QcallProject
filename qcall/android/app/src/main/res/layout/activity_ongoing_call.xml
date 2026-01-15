@@ -1,118 +1,145 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0056D2"> <LinearLayout
+    android:background="@drawable/bg_midnight_gradient"> <ImageView
+        android:id="@+id/imageAvatar"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_marginTop="60dp"
+        android:background="@drawable/bg_glass_light" 
+        android:padding="30dp"
+        android:src="@android:drawable/sym_def_app_icon"
+        app:tint="#FFFFFF"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
         android:id="@+id/infoContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="60dp"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="30dp"
+        android:background="@drawable/bg_glass_panel"
         android:gravity="center"
-        android:orientation="vertical">
-
-        <androidx.cardview.widget.CardView
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            app:cardCornerRadius="60dp"
-            app:cardElevation="10dp"
-            app:cardBackgroundColor="#FFFFFF">
-            <ImageView
-                android:id="@+id/callerImage"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:src="@mipmap/ic_launcher"
-                android:scaleType="centerCrop"/>
-        </androidx.cardview.widget.CardView>
-
-        <TextView
-            android:id="@+id/callerName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="25dp"
-            android:text="Unknown Name"
-            android:textColor="#FFFFFF"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:letterSpacing="-0.02"/>
-
-        <TextView
-            android:id="@+id/callerNumber"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:text="+91 000 000 0000"
-            android:textColor="#E0E0E0"
-            android:textSize="18sp"/>
+        android:orientation="vertical"
+        android:paddingVertical="30dp"
+        android:paddingHorizontal="16dp"
+        app:layout_constraintTop_toBottomOf="@id/imageAvatar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
         <TextView
             android:id="@+id/callStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="15dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="6dp"
-            android:background="@drawable/ic_launcher_background" 
-            android:backgroundTint="#20FFFFFF"
             android:text="00:00"
-            android:textColor="#80D8FF"
-            android:textSize="18sp"
+            android:textColor="#69F0AE"
+            android:textSize="16sp"
+            android:letterSpacing="0.1"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/callerName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Unknown Caller"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
             android:textStyle="bold"
-            android:letterSpacing="0.1"/>
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/callerNumber"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="+1 234 567 890"
+            android:textColor="#CBD5E1"
+            android:textSize="16sp" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_above="@id/bottomSection"
         android:layout_marginBottom="50dp"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingHorizontal="20dp">
+        app:layout_constraintBottom_toTopOf="@+id/endOngoingCallBtn">
 
-        <LinearLayout android:id="@+id/btnMute" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <androidx.cardview.widget.CardView android:id="@+id/bgMute" android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#20FFFFFF" app:cardElevation="0dp">
-                <ImageView android:id="@+id/iconMute" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/ic_lock_silent_mode_off" app:tint="#FFFFFF"/>
-            </androidx.cardview.widget.CardView>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Mute" android:textColor="#DDDDDD" android:textSize="12sp" android:textStyle="bold"/>
+        <LinearLayout
+            android:id="@+id/btnMute"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="40dp"
+            android:gravity="center"
+            android:orientation="vertical">
+            
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/bgMute"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/btn_glass_circle"
+                android:src="@android:drawable/ic_lock_silent_mode_off"
+                android:padding="16dp"
+                android:scaleType="fitCenter"
+                app:tint="#FFFFFF" />
+                
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Mute"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/btnKeypad" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <androidx.cardview.widget.CardView android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#20FFFFFF" app:cardElevation="0dp">
-                <ImageView android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_upload" app:tint="#FFFFFF"/>
-            </androidx.cardview.widget.CardView>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Keypad" android:textColor="#DDDDDD" android:textSize="12sp" android:textStyle="bold"/>
+        <LinearLayout
+            android:id="@+id/btnSpeaker"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="40dp"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/bgSpeaker"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/btn_glass_circle"
+                android:src="@android:drawable/ic_lock_silent_mode"
+                android:padding="16dp"
+                android:scaleType="fitCenter"
+                app:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Speaker"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/btnSpeaker" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <androidx.cardview.widget.CardView android:id="@+id/bgSpeaker" android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#20FFFFFF" app:cardElevation="0dp">
-                <ImageView android:id="@+id/iconSpeaker" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/ic_lock_silent_mode_off" app:tint="#FFFFFF"/>
-            </androidx.cardview.widget.CardView>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Speaker" android:textColor="#DDDDDD" android:textSize="12sp" android:textStyle="bold"/>
-        </LinearLayout>
     </LinearLayout>
 
-    <RelativeLayout
-        android:id="@+id/bottomSection"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/endOngoingCallBtn"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
         android:layout_marginBottom="60dp"
-        android:gravity="center">
+        android:background="@drawable/btn_gradient_red"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:padding="22dp"
+        android:scaleType="fitCenter"
+        android:elevation="10dp"
+        app:tint="#FFFFFF"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <androidx.cardview.widget.CardView
-            android:id="@+id/endOngoingCallBtn"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            app:cardCornerRadius="36dp"
-            app:cardBackgroundColor="#FF3B30"
-            app:cardElevation="8dp">
-            <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_gravity="center"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                app:tint="#FFFFFF"/>
-        </androidx.cardview.widget.CardView>
-    </RelativeLayout>
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

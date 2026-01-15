@@ -10,33 +10,27 @@ const { CallManagerModule, DirectCall } = NativeModules;
 const callEventEmitter = new NativeEventEmitter(CallManagerModule);
 
 const COLORS = {
-  primary: '#0056D2',   
-  inactive: '#9CA3AF',  
-  background: '#FFFFFF', 
+  primary: '#0056D2',
+  inactive: '#9CA3AF',
+  background: '#FFFFFF',
   shadow: '#000000',
 };
 
+// 🟢 CONFIG: The height of the tab content itself (excluding the safe area)
+const TAB_CONTENT_HEIGHT = 60; 
+
 export default function TabLayout() {
+  // 🟢 DYNAMIC INSETS: This reads the exact space needed for the Home Indicator (iOS) or Nav Bar (Android)
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
   useEffect(() => {
     if (!CallManagerModule) return;
 
-    /**
-     * 🟢 AUTO-RESTART & ROLE SYNC
-     * When the Native side recreates the React Context after a role change,
-     * this effect runs to ensure the JS thread catches up.
-     */
     const syncAppState = async () => {
       try {
-        // 1. Check if we are now the default dialer
         const isDefault = await CallManagerModule.checkIsDefaultDialer();
-        
         if (isDefault) {
-          console.log("App Active as Default Dialer. Checking for pending actions...");
-          
-          // 2. Trigger any pending calls stored in the 'DirectCall' vault
           if (DirectCall?.processPendingCall) {
             DirectCall.processPendingCall();
           }
@@ -46,30 +40,17 @@ export default function TabLayout() {
       }
     };
 
-    /**
-     * 🟢 PROFESSIONAL STATE LISTENER
-     * Listens for the 'Disconnected' signal from Kotlin.
-     * Prevents the app from closing by replacing the route with the Main Tabs.
-     */
     const subscription = callEventEmitter.addListener('onCallStateChanged', (event: { status: string }) => {
-      console.log('Bridge Event Received:', event.status);
-
       if (event.status === 'Disconnected' || event.status === 'Idle') {
-        // FIX: Clean absolute path without trailing slash
         router.replace('/(tabs)');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     });
 
-    /**
-     * 🟢 COLD START SYNC
-     * If the app is launched directly via a system call event.
-     */
     const checkInitialCall = async () => {
       try {
         const currentCall = await CallManagerModule.getCurrentCallStatus();
         if (currentCall && currentCall.status === 'Incoming') {
-          // FIX: Use clean absolute path
           router.push('../incoming');
         }
       } catch (e) {
@@ -81,7 +62,7 @@ export default function TabLayout() {
     checkInitialCall();
 
     return () => subscription.remove();
-  }, []); 
+  }, []);
 
   return (
     <Tabs 
@@ -90,23 +71,31 @@ export default function TabLayout() {
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.inactive,
         tabBarHideOnKeyboard: true, 
+        
+        // 🟢 UNIVERSAL LAYOUT LOGIC
         tabBarStyle: { 
-          height: Platform.OS === 'ios' ? 85 : 60 + insets.bottom, 
-          paddingBottom: Platform.OS === 'ios' ? 25 : insets.bottom + 5,
-          paddingTop: 10,
           backgroundColor: COLORS.background,
           borderTopWidth: 0, 
-          elevation: 10, 
+          elevation: 20, 
           shadowColor: COLORS.shadow, 
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.05,
-          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          
+          // 1. DYNAMIC HEIGHT: Base content height + whatever the device needs at the bottom
+          height: TAB_CONTENT_HEIGHT + insets.bottom,
+          
+          // 2. DYNAMIC PADDING: Pushes icons up so they don't touch the gesture bar
+          // If insets.bottom is 0 (old Androids), we add 10px breathing room.
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+          
+          paddingTop: 10, // Space above icons
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 4,
           fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+          marginBottom: 4, // Tiny visual tweak for label spacing
         }
       }}
     >
@@ -171,8 +160,5 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   iconActive: {
     transform: [{ translateY: -2 }],
-    textShadowColor: 'rgba(0, 86, 210, 0.3)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 4
   }
 });

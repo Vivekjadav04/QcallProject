@@ -14,6 +14,10 @@ import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.rkgroup.qcall.native_telephony.QCallInCallService
 
+// 🟢 CORRECT IMPORTS
+import com.rkgroup.qcall.IncomingCallActivity
+import com.rkgroup.qcall.OngoingCallActivity
+
 class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private val TAG = "QCallDebug"
@@ -38,41 +42,35 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
     override fun getName(): String = "CallManagerModule"
 
-    // 🟢 2. ANSWER CALL
+    // 🟢 1. ANSWER CALL
     @ReactMethod
     fun answerCall() {
         Log.d(TAG, "Attempting to answer call...")
         val call = QCallInCallService.currentCall
         if (call != null) {
-            call.answer(0)
+            QCallInCallService.answerCurrentCall()
+            
             val params = Arguments.createMap()
             params.putString("status", "Active")
             sendEvent("onCallStateChanged", params)
-            Log.d(TAG, "Call Answered via Native Service")
         } else {
             Log.e(TAG, "FAILED to answer: currentCall is null")
         }
     }
 
-    // 🟢 3. END CALL
+    // 🟢 2. END CALL
     @ReactMethod
     fun endCall() {
         Log.d(TAG, "Attempting to end call...")
         val call = QCallInCallService.currentCall
         if (call != null) {
-            if (call.state == Call.STATE_RINGING) {
-                call.reject(false, null)
-                Log.d(TAG, "Call Rejected")
-            } else {
-                call.disconnect()
-                Log.d(TAG, "Call Disconnected")
-            }
+            QCallInCallService.hangupCurrentCall()
         } else {
             Log.e(TAG, "FAILED to end: currentCall is null")
         }
     }
 
-    // 🟢 4. START CALL
+    // 🟢 3. START CALL (Real Call)
     @ReactMethod
     fun startCall(number: String) {
         Log.d(TAG, "Starting call to: $number")
@@ -81,20 +79,24 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             val intent = Intent(Intent.ACTION_CALL, uri)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             
-            // 🟢 FIX: Use getCurrentActivity() as a function call
-            val activity: Activity? = getCurrentActivity()
+            // 1. Start the System Call
+            // We do NOT manually open our UI here anymore.
+            // We rely on QCallInCallService to detect the call and open the UI.
+            // This prevents the "Double Screen" or "Overlap" issue.
             
+            val activity: Activity? = reactApplicationContext.currentActivity
             if (activity != null) {
                 activity.startActivity(intent)
             } else {
                 reactApplicationContext.startActivity(intent)
             }
+
         } catch (e: Exception) {
             Log.e(TAG, "Error starting call: ${e.message}")
         }
     }
 
-    // 🟢 5. AUDIO CONTROLS
+    // 🟢 4. AUDIO CONTROLS
     @ReactMethod
     fun setMuted(muted: Boolean) {
         try {
@@ -115,7 +117,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    // 🟢 6. GET STATUS
+    // 🟢 5. GET STATUS
     @ReactMethod
     fun getCurrentCallStatus(promise: Promise) {
         val call = QCallInCallService.currentCall
@@ -139,13 +141,12 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         promise.resolve(map)
     }
 
-    // 🟢 7. GET ACTIVE CALL INFO
     @ReactMethod
     fun getActiveCallInfo(promise: Promise) {
         getCurrentCallStatus(promise)
     }
 
-    // 🟢 8. DEFAULT DIALER CHECKS
+    // 🟢 7. DEFAULT DIALER CHECKS
     @ReactMethod
     fun checkIsDefaultDialer(promise: Promise) {
         try {
@@ -186,10 +187,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
             if (intent != null) {
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                
-                // 🟢 FIX: Use getCurrentActivity() as a function call
-                val activity: Activity? = getCurrentActivity()
-                
+                val activity: Activity? = reactApplicationContext.currentActivity
                 if (activity != null) {
                     activity.startActivity(intent)
                 } else {
@@ -201,6 +199,48 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             }
         } catch (e: Exception) {
             promise.reject("ERROR", e.message)
+        }
+    }
+
+    // ==========================================================
+    // 🟢 8 & 9. DEBUG METHODS (FOR TEST BUTTONS)
+    // ==========================================================
+
+    @ReactMethod
+    fun launchTestIncomingUI(name: String, number: String) {
+        try {
+            Log.d(TAG, "DEBUG: Launching IncomingCallActivity")
+            val intent = Intent(reactApplicationContext, IncomingCallActivity::class.java)
+            
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            
+            // Pass Data matching IncomingCallActivity logic
+            intent.putExtra("contact_name", name)
+            intent.putExtra("contact_number", number)
+            intent.putExtra("is_test_mode", true)
+            
+            reactApplicationContext.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error launching Incoming UI: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun launchTestOutgoingUI(name: String, number: String) {
+        try {
+            Log.d(TAG, "DEBUG: Launching OngoingCallActivity")
+            val intent = Intent(reactApplicationContext, OngoingCallActivity::class.java)
+            
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            
+            // Pass Data matching OngoingCallActivity logic
+            intent.putExtra("contact_name", name)
+            intent.putExtra("contact_number", number)
+            intent.putExtra("is_test_mode", true)
+            
+            reactApplicationContext.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error launching Outgoing UI: ${e.message}")
         }
     }
 

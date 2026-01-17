@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
   SectionList, Vibration, LayoutAnimation, Platform, UIManager,
-  ToastAndroid, TextInput, Alert, GestureResponderEvent, RefreshControl
+  ToastAndroid, TextInput, Alert, GestureResponderEvent, RefreshControl, NativeModules
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import sectionListGetItemLayout from 'react-native-section-list-get-item-layout';
 import { useRouter, useFocusEffect } from 'expo-router'; 
 import { useUser } from '../../context/UserContext'; 
+
+// 🟢 IMPORT NATIVE MODULE
+const { CallManagerModule } = NativeModules;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -32,7 +35,7 @@ const HeaderComponent = ({ searchText, setSearchText, router, userPhoto }: any) 
          {userPhoto ? (
             <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
          ) : (
-            <View style={[styles.avatarImage, { backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' }]}>
+            <View style={styles.avatarImage}>
                 <Ionicons name="person" size={18} color="#FFF" />
             </View>
          )}
@@ -43,7 +46,7 @@ const HeaderComponent = ({ searchText, setSearchText, router, userPhoto }: any) 
         clearButtonMode="while-editing"
       />
       <View style={styles.searchRightIcons}>
-         <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/qr-scanner')}>
+         <TouchableOpacity style={styles.iconButton}>
            <MaterialCommunityIcons name="qrcode-scan" size={22} color="#6B7280" />
          </TouchableOpacity>
       </View>
@@ -74,7 +77,6 @@ export default function ContactsScreen() {
         
         if (status === 'granted') {
           setPermissionGranted(true);
-          // Only load if the list is empty to prevent constant loading spinners
           if (allContacts.length === 0) {
             loadContacts();
           }
@@ -167,6 +169,37 @@ export default function ContactsScreen() {
     } catch (e) { console.log(e); }
   };
 
+  // 🟢 NATIVE CALL FUNCTION
+  const handleNativeCall = async (rawNumber: string) => {
+    if (!rawNumber) return;
+    const cleanNumber = rawNumber.replace(/[^\d+]/g, ''); // Keep only digits and +
+
+    if (Platform.OS === 'android') {
+        try {
+            // Check if we are default dialer
+            const isDefault = await CallManagerModule.checkIsDefaultDialer();
+            if (!isDefault) {
+                Alert.alert(
+                    "Default Dialer Required",
+                    "To make calls directly, please set QCall as your default phone app.",
+                    [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Set Default", onPress: () => CallManagerModule.requestDefaultDialer() }
+                    ]
+                );
+                return;
+            }
+            // Trigger Native Call (Launches CallActivity.kt)
+            CallManagerModule.startCall(cleanNumber);
+        } catch (e) {
+            Alert.alert("Error", "Could not start call.");
+        }
+    } else {
+        // iOS Fallback (just in case)
+        Alert.alert("Not Supported", "iOS calling not implemented yet.");
+    }
+  };
+
   const sections = useMemo(() => {
     const lowerSearch = search.toLowerCase();
     const filtered = allContacts.filter(c => 
@@ -236,13 +269,7 @@ export default function ContactsScreen() {
         style={styles.row} 
         activeOpacity={0.7} 
         onLongPress={() => !isMe && toggleFavorite(item.id)} 
-        onPress={() => {
-            const cleanNumber = rawNumber.replace(/\D/g, ''); 
-            router.push({
-                pathname: '/outgoing',
-                params: { name, number: cleanNumber, status: 'outgoing', photo: item.image?.uri }
-            });
-        }}
+        onPress={() => handleNativeCall(rawNumber)} // 🟢 CALL NATIVE MODULE
       >
         <View style={styles.avatarContainer}>
           {item.imageAvailable && item.image?.uri ? (
@@ -260,7 +287,11 @@ export default function ContactsScreen() {
         </View>
         <View style={styles.actionCol}>
            {isFav && <Ionicons name="heart" size={16} color="#D32F2F" style={{marginRight: 10}} />}
-           <Ionicons name="information-circle-outline" size={22} color="#E0E0E0" />
+           
+           {/* Call Icon explicitly triggers native call too */}
+           <TouchableOpacity onPress={() => handleNativeCall(rawNumber)}>
+             <Ionicons name="call" size={22} color="#0056D2" />
+           </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -351,7 +382,7 @@ const styles = StyleSheet.create({
   headerContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.searchBarBg, borderRadius: 30, paddingHorizontal: 10, height: 50 },
   profileIconLeft: { marginRight: 10 },
-  avatarImage: { width: 32, height: 32, borderRadius: 16 },
+  avatarImage: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
   searchInput: { flex: 1, fontSize: 16, color: '#000' },
   searchRightIcons: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   iconButton: { padding: 5 },

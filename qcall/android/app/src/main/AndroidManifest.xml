@@ -31,18 +31,19 @@
         android:enableOnBackInvokedCallback="false">
 
         <activity
-            android:name=".IncomingCallActivity"
-            android:theme="@style/CallScreenTheme" 
-            android:launchMode="singleInstance"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
+            android:name=".SplashActivity"
+            android:theme="@style/SplashTheme" 
             android:screenOrientation="portrait"
-            android:showOnLockScreen="true"
-            android:exported="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity
-            android:name=".OngoingCallActivity"
-            android:theme="@style/CallScreenTheme"
+            android:name=".CallActivity"
+            android:theme="@style/CallScreenTheme" 
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:taskAffinity=""
@@ -68,9 +69,9 @@
 
         <receiver
             android:name=".native_telephony.NotificationActionReceiver"
-            android:exported="false">
+            android:exported="true"> 
             <intent-filter>
-                <action android:name="ACTION_ACCEPT"/>
+                <action android:name="ACTION_ANSWER"/>
                 <action android:name="ACTION_DECLINE"/>
             </intent-filter>
         </receiver>
@@ -81,16 +82,11 @@
             android:launchMode="singleTask"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.App.SplashScreen"
+            android:theme="@style/AppTheme" 
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:screenOrientation="portrait">
             
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -104,12 +100,10 @@
             android:targetActivity=".MainActivity"
             android:permission="android.permission.CALL_PHONE"
             android:exported="true">
-            
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -87,7 +87,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
           onChangeText={setSearchText} 
         />
         <TouchableOpacity style={styles.filterIcon}>
-           <Feather name="sliders" size={16} color={THEME.colors.primary} />
+            <Feather name="sliders" size={16} color={THEME.colors.primary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -107,41 +107,58 @@ const AdCard = () => (
           <Text style={styles.adDesc}>Caller ID & Spam Block.</Text>
         </View>
         <View style={styles.adIconCircle}>
-           <Feather name="zap" size={20} color="#FBBF24" />
+            <Feather name="zap" size={20} color="#FBBF24" />
         </View>
     </LinearGradient>
   </View>
 );
 
-// 🟢 NEW DEBUG COMPONENT
-const DebugButtons = ({ router }: { router: any }) => (
-  <View style={styles.debugContainer}>
-    <Text style={styles.debugLabel}>🚧 DEBUG / TESTING</Text>
-    <View style={styles.debugRow}>
-      <TouchableOpacity 
-        style={[styles.debugBtn, { backgroundColor: THEME.colors.success }]}
-        onPress={() => router.push({ 
-          pathname: '/incoming', 
-          params: { name: 'Elon Musk', number: '+1 (555) 000-9999' } 
-        })}
-      >
-        <Feather name="phone-incoming" size={16} color="#FFF" />
-        <Text style={styles.debugText}>Test Incoming</Text>
-      </TouchableOpacity>
+// 🟢 DEBUG BUTTONS (Aligned with Single Activity Architecture)
+const DebugButtons = () => {
+  
+  const testIncomingLocked = () => {
+    CallManagerModule.launchTestIncomingUI("Elon Musk", "+1 (555) 019-9999");
+  };
 
-      <TouchableOpacity 
-        style={[styles.debugBtn, { backgroundColor: THEME.colors.primary }]}
-        onPress={() => router.push({ 
-          pathname: '/outgoing', 
-          params: { name: 'Mark Zuckerberg', number: '198', status: 'Dialing' } 
-        })}
-      >
-        <Feather name="phone-outgoing" size={16} color="#FFF" />
-        <Text style={styles.debugText}>Test Outgoing</Text>
-      </TouchableOpacity>
+  const testIncomingUnlocked = () => {
+    CallManagerModule.showTestNotification("Jeff Bezos", "+1 (555) 020-8888");
+  };
+
+  const testActiveCall = () => {
+    CallManagerModule.launchTestOutgoingUI("Bill Gates", "+1 (555) 030-7777");
+  };
+
+  return (
+    <View style={styles.debugContainer}>
+      <Text style={styles.debugLabel}>🚧 NATIVE UI TESTS</Text>
+      <View style={styles.debugRow}>
+        <TouchableOpacity 
+          style={[styles.debugBtn, { backgroundColor: THEME.colors.success }]}
+          onPress={testIncomingLocked}
+        >
+          <Feather name="lock" size={16} color="#FFF" />
+          <Text style={styles.debugText}>Locked (Swipe)</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.debugBtn, { backgroundColor: '#8B5CF6' }]} 
+          onPress={testIncomingUnlocked}
+        >
+          <Feather name="bell" size={16} color="#FFF" />
+          <Text style={styles.debugText}>Notify</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.debugBtn, { backgroundColor: THEME.colors.primary }]}
+          onPress={testActiveCall}
+        >
+          <Feather name="phone-call" size={16} color="#FFF" />
+          <Text style={styles.debugText}>Active</Text>
+        </TouchableOpacity>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
   const isMissed = item.type === 'missed';
@@ -233,6 +250,7 @@ export default function CallLogScreen() {
       if (Platform.OS === 'android') {
         const hasPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
         if (!hasPerm) {
+          // If NOT granted, just set state. DO NOT REQUEST here.
           setPermissionGranted(false);
           return; 
         }
@@ -243,7 +261,7 @@ export default function CallLogScreen() {
       const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image] });
       
       const newMap: any = {};
-      data.forEach(c => c.phoneNumbers?.forEach(p => {
+      data.forEach((c: any) => c.phoneNumbers?.forEach((p: any) => {
         if(p.number) newMap[normalizeNumber(p.number)] = { name: c.name, image: c.image?.uri };
       }));
 
@@ -283,13 +301,12 @@ export default function CallLogScreen() {
       const init = async () => {
         CallService.preloadContacts();
         if (Platform.OS === 'android') {
-          // Check permissions on focus
+          // 🟢 CHECK ONLY - NO AUTO REQUEST
           const hasLogPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
           if (hasLogPerm) {
              loadData();
           } else {
-             const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
-             status === PermissionsAndroid.RESULTS.GRANTED ? loadData() : setPermissionGranted(false);
+             setPermissionGranted(false);
           }
         } else {
           loadData();
@@ -299,18 +316,30 @@ export default function CallLogScreen() {
     }, [])
   );
 
+  // 🟢 NEW: Manual Permission Requester (Linked to Error UI)
+  const manualPermissionRequest = async () => {
+    if (Platform.OS === 'android') {
+       try {
+         const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
+         if (status === PermissionsAndroid.RESULTS.GRANTED) {
+            loadData();
+         }
+       } catch (e) { console.error(e); }
+    }
+  };
+
   const switchTab = (tab: 'Home' | 'Favorites') => {
     setActiveTab(tab);
     Animated.spring(tabAnim, { toValue: tab === 'Home' ? 0 : 1, useNativeDriver: false }).start();
   };
 
-  // --- 2. THE CRITICAL LOGIC: CHECK DEFAULT ON CALL CLICK ---
+  // --- 2. MAKE A CALL ---
   const handleNativeCall = useCallback(async (name: string | null, number: string) => {
     const cleanNumber = normalizeNumber(number);
     
     if (Platform.OS === 'android') {
         try {
-            // STEP 1: Ask the native module if we are the default dialer
+            // STEP 1: Check Default Dialer
             let isDefault = false;
             try {
                  isDefault = await CallManagerModule.checkIsDefaultDialer();
@@ -318,9 +347,8 @@ export default function CallLogScreen() {
                  console.warn("Module check failed, assuming false", err);
             }
             
-            // STEP 2: Logic Branch
+            // STEP 2: Handle Permissions
             if (!isDefault) {
-                // CASE A: NOT DEFAULT -> Show Popup -> Do NOT Call
                 Alert.alert(
                     "Permission Required",
                     "To make calls directly from this app, QCall must be your default phone app.",
@@ -329,25 +357,18 @@ export default function CallLogScreen() {
                         { 
                             text: "Set Default", 
                             onPress: async () => {
-                                // Open the system dialog
                                 await CallManagerModule.requestDefaultDialer();
                             }
                         }
                     ],
                     { cancelable: true }
                 );
-                return; // STOP EXECUTION HERE
+                return; 
             }
 
-            // CASE B: IS DEFAULT -> Make the call
+            // STEP 3: Start Call (The Native Service handles the UI launch)
             CallManagerModule.startCall(cleanNumber);
             
-            // Navigate to Outgoing Screen
-            router.push({ 
-                pathname: '/outgoing', 
-                params: { name: name || "Unknown", number: cleanNumber, status: 'Dialing' } 
-            });
-
         } catch (e) {
             Alert.alert("Error", "Could not initiate call service.");
         }
@@ -400,8 +421,8 @@ export default function CallLogScreen() {
         
         <AdCard />
 
-        {/* 🟢 ADDED: DEBUG BUTTONS */}
-        <DebugButtons router={router} />
+        {/* 🟢 CONNECTED DEBUG BUTTONS */}
+        <DebugButtons />
 
         <View style={styles.tabWrapper}>
           <View style={styles.tabContainer}>
@@ -418,7 +439,8 @@ export default function CallLogScreen() {
         </View>
 
         {!permissionGranted && (
-            <TouchableOpacity onPress={loadData} style={styles.permErrorBox}>
+            // 🟢 UPDATED: OnPress calls manualPermissionRequest
+            <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>
                 <Feather name="alert-triangle" size={16} color="#DC2626" />
                 <Text style={styles.permErrorText}>Permission needed. Tap to enable.</Text>
             </TouchableOpacity>
@@ -452,7 +474,7 @@ export default function CallLogScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Note: Pass handleNativeCall here too so dialer uses the same logic */}
+        {/* Modal Logic */}
         <DialerModal visible={dialerVisible} onClose={() => setDialerVisible(false)} masterLogs={masterLogs} onCallPress={handleNativeCall} />
         
       </SafeAreaView>
@@ -486,7 +508,7 @@ const styles = StyleSheet.create({
   adDesc: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
   adIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
 
-  // 🟢 NEW DEBUG STYLES
+  // DEBUG STYLES
   debugContainer: { paddingHorizontal: 20, marginBottom: 15 },
   debugLabel: { fontSize: 10, color: '#94A3B8', fontWeight: '700', marginBottom: 5, letterSpacing: 1 },
   debugRow: { flexDirection: 'row', gap: 10 },

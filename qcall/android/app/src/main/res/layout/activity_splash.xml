@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#007AFF"> <FrameLayout
+        android:layout_width="300dp"
+        android:layout_height="300dp"
+        android:layout_centerInParent="true">
+
+        <ImageView
+            android:id="@+id/ripple_1"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:src="@drawable/circle_white"
+            android:layout_gravity="center"
+            android:alpha="0" />
+
+        <ImageView
+            android:id="@+id/ripple_2"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:src="@drawable/circle_white"
+            android:layout_gravity="center"
+            android:alpha="0" />
+
+        <ImageView
+            android:id="@+id/logo"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:src="@drawable/ic_q_logo"
+            android:layout_gravity="center"
+            android:elevation="10dp" /> </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/text_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="80dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:alpha="0">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="QCall"
+            android:textColor="#FFFFFF"
+            android:textSize="36sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.05"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Secure. Fast. Private."
+            android:textColor="#CCFFFFFF"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp"
+            android:letterSpacing="0.1"/>
+
+    </LinearLayout>
+
+</RelativeLayout>

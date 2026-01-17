@@ -25,11 +25,11 @@ import java.util.concurrent.TimeUnit
 
 class CallActivity : Activity() {
 
-    // Views from your XML
+    // Views
     private lateinit var incomingLayout: RelativeLayout
     private lateinit var ongoingLayout: RelativeLayout
     
-    // Swipe Logic Vars
+    // Swipe Logic
     private lateinit var draggableButton: View
     private lateinit var arrowUp: ImageView
     private lateinit var arrowDown: ImageView
@@ -40,6 +40,7 @@ class CallActivity : Activity() {
     // State
     private var isMuted = false
     private var isSpeaker = false
+    private var isTimerRunning = false // 🟢 Track if timer is active
     
     // Timer
     private val handler = Handler(Looper.getMainLooper())
@@ -64,7 +65,8 @@ class CallActivity : Activity() {
             if (action == "ACTION_CALL_ENDED") {
                 finishAndRemoveTask()
             } else if (action == "ACTION_CALL_ACTIVE") {
-                switchToOngoingUI()
+                // 🟢 1. Call Answered! Now start the timer.
+                switchToOngoingUI(startTimerNow = true)
             }
         }
     }
@@ -73,23 +75,19 @@ class CallActivity : Activity() {
         super.onCreate(savedInstanceState)
         unlockScreen()
 
-        // 1. Enable Edge-to-Edge (Draw behind Status Bar)
-        // This makes the status bar transparent so your background fills the whole screen.
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContentView(R.layout.activity_call)
 
-        // 2. Handle Safe Area (Insets)
-        // We find the root view and apply padding so your buttons don't get covered by the Notch/Status Bar.
+        // Handle Safe Area (Insets)
         val rootView = findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            // Apply padding to avoid overlap
             view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
             WindowInsetsCompat.CONSUMED
         }
 
-        // 3. Bind Views
+        // Bind Views
         incomingLayout = findViewById(R.id.incomingRLView)
         ongoingLayout = findViewById(R.id.inProgressCallRLView)
         draggableButton = findViewById(R.id.draggable_button)
@@ -97,22 +95,32 @@ class CallActivity : Activity() {
         arrowDown = findViewById(R.id.arrow_down)
         durationTv = findViewById(R.id.ongoingDuration)
 
-        // 4. Get Data from Intent
+        // Get Data from Intent
         val name = intent.getStringExtra("contact_name") ?: "Unknown"
         val number = intent.getStringExtra("contact_number") ?: ""
         val status = intent.getStringExtra("call_status") ?: "Incoming"
 
-        // 5. Set Text
+        // Set Text
         findViewById<TextView>(R.id.incomingCallerName).text = name
         findViewById<TextView>(R.id.incomingNumber).text = number
         findViewById<TextView>(R.id.ongoingCallerName).text = name
         findViewById<TextView>(R.id.ongoingCallerNumber).text = number
 
-        // 6. Initial State
-        if (status == "Active") {
-            switchToOngoingUI()
-        } else {
-            setupSwipeListener()
+        // 🟢 2. Initial State Logic
+        when (status) {
+            "Dialing" -> {
+                // Outgoing call. Show UI, but NO Timer yet.
+                switchToOngoingUI(startTimerNow = false)
+                durationTv.text = "Dialing..."
+            }
+            "Active" -> {
+                // Already active (recovered state). Start Timer.
+                switchToOngoingUI(startTimerNow = true)
+            }
+            else -> {
+                // Incoming
+                setupSwipeListener()
+            }
         }
 
         setupButtons()
@@ -184,7 +192,8 @@ class CallActivity : Activity() {
                     val diff = view.y - initialY
                     if (diff < -250) {
                         QCallInCallService.answerCurrentCall()
-                        switchToOngoingUI()
+                        // 🟢 When answered, call becomes active immediately
+                        switchToOngoingUI(startTimerNow = true)
                     } else if (diff > 250) {
                         QCallInCallService.hangupCurrentCall()
                         finishAndRemoveTask()
@@ -200,11 +209,16 @@ class CallActivity : Activity() {
         }
     }
 
-    private fun switchToOngoingUI() {
+    // 🟢 3. Helper: Only start timer if requested
+    private fun switchToOngoingUI(startTimerNow: Boolean) {
         runOnUiThread {
             incomingLayout.visibility = View.GONE
             ongoingLayout.visibility = View.VISIBLE
-            handler.post(timerRunnable)
+            
+            if (startTimerNow && !isTimerRunning) {
+                isTimerRunning = true
+                handler.post(timerRunnable)
+            }
         }
     }
 

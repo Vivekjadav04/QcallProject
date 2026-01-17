@@ -1,6 +1,7 @@
 package com.rkgroup.qcall.native_telephony
 
 import android.annotation.SuppressLint
+import android.app.KeyguardManager // 🟢 Added
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -56,7 +57,6 @@ class QCallInCallService : InCallService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // 1. Setup Channel
         NotificationHelper.createNotificationChannel(this)
     }
 
@@ -71,37 +71,38 @@ class QCallInCallService : InCallService() {
         super.onCallAdded(call)
         currentCall = call
         
-        // 2. Get Number
         val handle = call.details.handle
         val number = handle?.schemeSpecificPart ?: ""
         lastCallerNumber = number
 
-        // 🟢 3. REAL CONTACT LOOKUP (Fixes "Unknown")
+        // Contact Lookup
         lastCallerName = getContactName(this, number)
         callStartTime = 0 
 
         if (call.state == Call.STATE_RINGING) {
             startRinging()
             
-            // 4. Show Notification (High Priority)
+            // Show Notification
             val notification = NotificationHelper.createIncomingCallNotification(this, lastCallerName, lastCallerNumber)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             
-            // 🟢 5. LAUNCH NATIVE UI (Fixes "White Screen" / "No UI")
-            launchCallActivity(lastCallerName, lastCallerNumber, "Incoming")
+            // 🟢 FIX 1: Only Launch Full Screen if Locked
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            if (km.isKeyguardLocked) {
+                launchCallActivity(lastCallerName, lastCallerNumber, "Incoming")
+            }
+            // If unlocked, the Notification above is enough.
             
             updateReactAndUI(Call.STATE_RINGING)
         } else {
-            // Outgoing / Active
+            // Outgoing
             val notification = NotificationHelper.createOngoingCallNotification(this, lastCallerName, lastCallerNumber)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             
-            callStartTime = System.currentTimeMillis()
+            // 🟢 FIX 2: Start as "Dialing", NOT "Active"
+            launchCallActivity(lastCallerName, lastCallerNumber, "Dialing")
             
-            // Launch UI for Outgoing
-            launchCallActivity(lastCallerName, lastCallerNumber, "Active")
-            
-            updateReactAndUI(Call.STATE_ACTIVE)
+            updateReactAndUI(Call.STATE_DIALING) // Send Dialing status to React
         }
 
         call.registerCallback(callCallback)
@@ -126,9 +127,11 @@ class QCallInCallService : InCallService() {
                 Call.STATE_ACTIVE -> {
                     stopRingtone()
                     if (callStartTime == 0L) callStartTime = System.currentTimeMillis()
+                    
+                    // 🟢 Call Connected: Now we tell UI to switch to Active (Start Timer)
                     sendInternalBroadcast("ACTION_CALL_ACTIVE")
                     
-                    // Update Notification to "Ongoing"
+                    // Update Notification
                     val notification = NotificationHelper.createOngoingCallNotification(this@QCallInCallService, lastCallerName, lastCallerNumber)
                     val nm = getSystemService(NotificationManager::class.java)
                     nm.notify(NotificationHelper.NOTIFICATION_ID, notification)
@@ -143,7 +146,6 @@ class QCallInCallService : InCallService() {
         }
     }
 
-    // --- 🟢 HELPER: LAUNCH UI ---
     private fun launchCallActivity(name: String, number: String, status: String) {
         val intent = Intent(this, CallActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -154,7 +156,6 @@ class QCallInCallService : InCallService() {
         startActivity(intent)
     }
 
-    // --- 🟢 HELPER: NATIVE CONTACT LOOKUP ---
     @SuppressLint("Range")
     private fun getContactName(context: Context, phoneNumber: String): String {
         if (phoneNumber.isEmpty()) return "Unknown"
@@ -171,9 +172,7 @@ class QCallInCallService : InCallService() {
                 }
                 cursor.close()
             }
-        } catch (e: Exception) {
-            // Log.e("ContactLookup", "Failed", e)
-        }
+        } catch (e: Exception) { }
         
         return if (contactName != "Unknown") contactName else "Unknown"
     }
@@ -208,6 +207,8 @@ class QCallInCallService : InCallService() {
         val status = when (state) {
             Call.STATE_ACTIVE -> "Active"
             Call.STATE_RINGING -> "Incoming"
+            Call.STATE_DIALING -> "Dialing"
+            Call.STATE_CONNECTING -> "Dialing"
             Call.STATE_DISCONNECTED -> "Disconnected"
             else -> "Unknown"
         }

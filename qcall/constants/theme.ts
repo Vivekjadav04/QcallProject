@@ -1,93 +1,85 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Modern "Trust Standard" Palette
+ * Vibe: Professional, Clean, High-Trust (Royal Blue & Slate)
  */
 
 import { Platform } from 'react-native';
 
 // ------------------------------------------------------------
-// 1. YOUR CUSTOM PALETTE
+// 1. THEME DEFINITION
 // ------------------------------------------------------------
-const palette = {
-  cream: '#FFF5E9',      // Background
-  peach: '#FFD7A8',      // User Bubble / Secondary
-  white: '#FFFFFF',      // Bot Bubble / Cards
-  orange: '#D66F2C',     // Primary Brand Text
-  green: '#00A34A',      // Success
-  black: '#000000',      // Primary Action
-  darkGrey: '#2D2D2D',   // Main Text
-  red: '#FF4B4B',        // Error / Hang up
+export const THEME = {
+  colors: {
+    // Brand Colors
+    primary: '#2563EB',      // Royal Blue (Active Tabs, Buttons)
+    primaryLight: '#EFF6FF', // Very Light Blue (Active Backgrounds)
+    secondary: '#64748B',    // Slate Gray (Secondary Text/Icons)
+    
+    // Backgrounds
+    bg: '#F8FAFC',
+    background: '#F8FAFC',   // Cool Gray 50 (App Background)
+    card: '#FFFFFF',         // Pure White (Cards, Lists, Modals)
+    
+    // Text
+    textMain: '#1E293B',     // Slate 800 (Headings, Names)
+    textSub: '#64748B',      // Slate 500 (Phone numbers, timestamps)
+    textInverse: '#FFFFFF',  // Text on Blue buttons
+    
+    // States
+    border: '#E2E8F0',       // Light Divider
+    success: '#10B981',      // Green (Call Answered)
+    danger: '#EF4444',       // Red (Call Missed/Ended)
+    warning: '#F59E0B',      // Amber
+  },
   
-  // Dark mode specific (Optional, for better contrast)
-  darkBackground: '#1A1A1A',
-  darkCard: '#2C2C2C',
+  // ------------------------------------------------------------
+  // 2. SHADOW SYSTEM (Depth)
+  // ------------------------------------------------------------
+  shadows: {
+    // Soft, expensive-looking shadow for cards
+    medium: {
+      shadowColor: "#2563EB", 
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 4, // Android
+    },
+    // Stronger shadow for floating elements (Tab Bar, FAB)
+    floating: {
+      shadowColor: "#0F172A", 
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 20,
+      elevation: 10, // Android
+    }
+  },
+  
+  // ------------------------------------------------------------
+  // 3. LAYOUT CONSTANTS
+  // ------------------------------------------------------------
+  layout: {
+    borderRadius: 16, // Modern "Squircle" radius
+    padding: 20,
+    iconSize: 24,
+  }
 };
 
-const tintColorLight = palette.orange;
-const tintColorDark = palette.orange; // Keep brand color in dark mode too
-
 // ------------------------------------------------------------
-// 2. UPDATED COLORS OBJECT
+// 4. COMPATIBILITY EXPORT (For any old code using Colors.light)
 // ------------------------------------------------------------
 export const Colors = {
   light: {
-    text: palette.darkGrey,
-    background: palette.cream, // The creamy warm white you wanted
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-    
-    // Custom Brand Colors
-    primary: palette.orange,
-    secondary: palette.peach,
-    card: palette.white,
-    success: palette.green,
-    error: palette.red,
-    border: palette.peach, 
+    text: THEME.colors.textMain,
+    background: THEME.colors.background,
+    tint: THEME.colors.primary,
+    tabIconDefault: THEME.colors.textSub,
+    tabIconSelected: THEME.colors.primary,
   },
   dark: {
     text: '#ECEDEE',
-    background: palette.darkBackground, // Dark grey for night mode
-    tint: tintColorDark,
-    icon: '#9BA1A6',
+    background: '#111827',
+    tint: THEME.colors.primary,
     tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-
-    // Custom Brand Colors (Dark Mode variations)
-    primary: palette.orange, // Orange still pops nicely on black
-    secondary: '#4A3B32',    // Darker version of peach
-    card: palette.darkCard,
-    success: palette.green,
-    error: palette.red,
-    border: '#444',
+    tabIconSelected: THEME.colors.primary,
   },
 };
-
-// ------------------------------------------------------------
-// 3. FONTS (KEPT EXACTLY AS IS)
-// ------------------------------------------------------------
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});

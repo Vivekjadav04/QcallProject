@@ -1,7 +1,7 @@
 package com.rkgroup.qcall.native_telephony
 
 import android.annotation.SuppressLint
-import android.app.KeyguardManager // 🟢 Added
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -14,7 +14,6 @@ import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
 import android.telecom.VideoProfile
-import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.rkgroup.qcall.CallActivity
 import com.rkgroup.qcall.CallManagerModule
@@ -75,34 +74,27 @@ class QCallInCallService : InCallService() {
         val number = handle?.schemeSpecificPart ?: ""
         lastCallerNumber = number
 
-        // Contact Lookup
         lastCallerName = getContactName(this, number)
         callStartTime = 0 
 
         if (call.state == Call.STATE_RINGING) {
             startRinging()
             
-            // Show Notification
             val notification = NotificationHelper.createIncomingCallNotification(this, lastCallerName, lastCallerNumber)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             
-            // 🟢 FIX 1: Only Launch Full Screen if Locked
             val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             if (km.isKeyguardLocked) {
                 launchCallActivity(lastCallerName, lastCallerNumber, "Incoming")
             }
-            // If unlocked, the Notification above is enough.
             
             updateReactAndUI(Call.STATE_RINGING)
         } else {
-            // Outgoing
             val notification = NotificationHelper.createOngoingCallNotification(this, lastCallerName, lastCallerNumber)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             
-            // 🟢 FIX 2: Start as "Dialing", NOT "Active"
             launchCallActivity(lastCallerName, lastCallerNumber, "Dialing")
-            
-            updateReactAndUI(Call.STATE_DIALING) // Send Dialing status to React
+            updateReactAndUI(Call.STATE_DIALING)
         }
 
         call.registerCallback(callCallback)
@@ -128,10 +120,8 @@ class QCallInCallService : InCallService() {
                     stopRingtone()
                     if (callStartTime == 0L) callStartTime = System.currentTimeMillis()
                     
-                    // 🟢 Call Connected: Now we tell UI to switch to Active (Start Timer)
                     sendInternalBroadcast("ACTION_CALL_ACTIVE")
                     
-                    // Update Notification
                     val notification = NotificationHelper.createOngoingCallNotification(this@QCallInCallService, lastCallerName, lastCallerNumber)
                     val nm = getSystemService(NotificationManager::class.java)
                     nm.notify(NotificationHelper.NOTIFICATION_ID, notification)
@@ -215,6 +205,7 @@ class QCallInCallService : InCallService() {
         try {
             val params = Arguments.createMap()
             params.putString("status", status)
+            // 🟢 CALLING THE STATIC METHOD WE FIXED IN CALLMANAGERMODULE
             CallManagerModule.sendEvent("onCallStateChanged", params)
         } catch (e: Exception) { }
     }

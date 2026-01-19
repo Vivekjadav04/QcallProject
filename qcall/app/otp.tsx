@@ -9,21 +9,26 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import * as Haptics from 'expo-haptics'; // Added for premium feel
-import { useUser } from '../context/UserContext'; 
+import * as Haptics from 'expo-haptics'; 
+
+// 🟢 Import Redux Hook & Service
+import { useAuth } from '../hooks/useAuth'; 
+import { sendOtpToUser } from '../services/Fast2SmsService';
 
 const { width } = Dimensions.get('window');
 
 export default function OtpScreen() {
   const router = useRouter();
-  const { login } = useUser(); 
-  const { phoneNumber, mode, actualOtp } = useLocalSearchParams();
-
-  // Logic Helpers
-  const mobileNumber = Array.isArray(phoneNumber) ? phoneNumber[0] : (phoneNumber || '');
-  const correctOtp = Array.isArray(actualOtp) ? actualOtp[0] : (actualOtp || '');
   
+  // 🟢 Use Redux Login
+  const { login } = useAuth(); 
+  
+  const { phoneNumber, bypass } = useLocalSearchParams();
+  const mobileNumber = Array.isArray(phoneNumber) ? phoneNumber[0] : (phoneNumber || '');
+  const isBypass = bypass === 'true';
+
   const [otp, setOtp] = useState(['', '', '', '']); 
+  const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
   const [timer, setTimer] = useState(30);
   const [loading, setLoading] = useState(false);
   const inputs = useRef<Array<TextInput | null>>([]); 
@@ -32,14 +37,35 @@ export default function OtpScreen() {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // 🟢 INIT: Send SMS or Bypass
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+
+    if (isBypass) {
+        console.log("Dev Mode: Skipping SMS.");
+        setGeneratedOtp("1234");
+        setOtp(['1','2','3','4']); // Auto-fill
+    } else {
+        sendOtp();
+    }
 
     const interval = setInterval(() => {
       setTimer((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const sendOtp = async () => {
+    const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    const sent = await sendOtpToUser(mobileNumber, newOtp);
+    if (sent) {
+        setGeneratedOtp(newOtp);
+        setTimer(30);
+        Alert.alert("Code Sent", "We sent a code to your phone.");
+    } else {
+        Alert.alert("Error", "Could not send SMS.");
+    }
+  };
 
   const handleChange = (text: string, index: number) => {
     const newOtp = [...otp];
@@ -48,7 +74,7 @@ export default function OtpScreen() {
 
     if (text && index < 3) {
       inputs.current[index + 1]?.focus();
-      Haptics.selectionAsync(); // Soft click sound
+      Haptics.selectionAsync(); 
     }
   };
 
@@ -62,11 +88,10 @@ export default function OtpScreen() {
     const enteredOtp = otp.join('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    if (enteredOtp.length !== 4) {
-      return; // UI should show it's incomplete without an ugly alert
-    }
+    if (enteredOtp.length !== 4) return;
 
-    if (enteredOtp !== correctOtp) {
+    // 🟢 VERIFY OTP
+    if (enteredOtp !== generatedOtp && !isBypass) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Animated.sequence([
         Animated.timing(shakeAnim, { toValue: 15, duration: 50, useNativeDriver: true }),
@@ -79,16 +104,16 @@ export default function OtpScreen() {
 
     setLoading(true);
     try {
-      if (mode === 'login') {
+        // 🟢 LOGIN & REDIRECT
         const success = await login(mobileNumber);
+        
         if (success) {
-            router.replace("/(tabs)");
+            // 🟢 REDIRECT TO WELCOME SCREEN
+            // This ensures the user goes through the permissions flow
+            router.replace("/welcome");
         } else {
-            router.replace({ pathname: "/register", params: { phoneNumber: mobileNumber } });
+            Alert.alert("Login Failed", "Please try again.");
         }
-      } else {
-        router.push({ pathname: "/register", params: { phoneNumber: mobileNumber, actualOtp } });
-      }
     } catch (error) {
       Alert.alert("Error", "Could not verify. Please try again.");
     } finally {
@@ -116,8 +141,9 @@ export default function OtpScreen() {
 
           <Text style={styles.title}>Verification</Text>
           <Text style={styles.subText}>
-            We've sent a 4-digit code to{"\n"}
-            <Text style={styles.highlight}>+91 {mobileNumber}</Text>
+            {isBypass ? "Dev Mode Enabled" : "We've sent a 4-digit code to"}
+            {"\n"}
+            <Text style={styles.highlight}>{isBypass ? "Magic Code: 1234" : `+91 ${mobileNumber}`}</Text>
           </Text>
 
           <Animated.View style={[styles.otpRow, { transform: [{ translateX: shakeAnim }] }]}>
@@ -148,7 +174,7 @@ export default function OtpScreen() {
                 <Text style={styles.timerText}>Resend in <Text style={{color: '#FFF'}}>00:{timer < 10 ? `0${timer}` : timer}</Text></Text>
               </View>
             ) : (
-              <TouchableOpacity onPress={() => setTimer(30)} style={styles.resendBtn}>
+              <TouchableOpacity onPress={sendOtp} style={styles.resendBtn}>
                 <Text style={styles.resendText}>Resend Code</Text>
               </TouchableOpacity>
             )}
@@ -167,8 +193,6 @@ export default function OtpScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Hidden Bypass Hint for Testing */}
-          <Text style={styles.devCode}>Debug: {actualOtp}</Text>
         </Animated.View>
       </SafeAreaView>
     </View>
@@ -206,5 +230,4 @@ const styles = StyleSheet.create({
   button: { height: 60, width: width - 48, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#3B82F6', shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
   btnContent: { flexDirection: 'row', alignItems: 'center' },
   buttonText: { fontSize: 18, fontWeight: '700', color: '#FFF', marginRight: 10 },
-  devCode: { marginTop: 40, color: 'rgba(255,255,255,0.05)', fontSize: 12 }
 });

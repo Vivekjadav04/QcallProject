@@ -18,6 +18,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.25",
     "@react-navigation/native-stack": "^7.8.6",
+    "@reduxjs/toolkit": "^2.11.2",
     "axios": "^1.13.2",
     "expo": "~54.0.27",
     "expo-blur": "~15.0.8",
@@ -32,6 +33,7 @@
     "expo-keep-awake": "~15.0.8",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.10",
+    "expo-navigation-bar": "~5.0.10",
     "expo-router": "~6.0.17",
     "expo-sms": "~14.0.8",
     "expo-splash-screen": "~31.0.12",
@@ -54,7 +56,8 @@
     "react-native-svg": "^15.12.1",
     "react-native-vector-icons": "^10.3.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "react-redux": "^9.2.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

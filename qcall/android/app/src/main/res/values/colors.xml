@@ -10,4 +10,11 @@
     <color name="splashscreen_background">#007AFF</color>
 
     <color name="bg_btn_light">#F1F5F9</color> 
+    <color name="bg_dark">#0F172A</color>
+    <color name="bg_dark_secondary">#1E293B</color>
+    <color name="neon_blue">#3B82F6</color>
+    <color name="neon_green">#10B981</color>
+    <color name="neon_red">#EF4444</color>
+    <color name="text_white">#FFFFFF</color>
+    <color name="text_grey">#94A3B8</color>
 </resources>

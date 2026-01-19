@@ -2,20 +2,19 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="100dp"
-    android:background="@drawable/bg_midnight_gradient" 
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="12dp">
+    android:background="#0F172A"
+    android:padding="12dp">
 
     <ImageView
         android:id="@+id/notif_image"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
         android:layout_centerVertical="true"
         android:layout_marginEnd="12dp"
         android:src="@android:drawable/sym_def_app_icon"
         android:scaleType="centerCrop"
         android:background="@drawable/bg_circle_gray"
+        android:padding="2dp"
         android:clipToOutline="true" />
 
     <LinearLayout
@@ -30,7 +29,7 @@
             android:id="@+id/notif_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Unknown"
+            android:text="Unknown Caller"
             android:textColor="#FFFFFF"
             android:textSize="16sp"
             android:textStyle="bold"
@@ -43,7 +42,7 @@
             android:layout_height="wrap_content"
             android:text="Incoming Call..."
             android:textColor="#94A3B8"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:maxLines="1" />
     </LinearLayout>
 
@@ -57,6 +56,7 @@
         android:gravity="center_vertical">
 
         <LinearLayout
+            android:id="@+id/container_decline"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -65,11 +65,11 @@
 
             <ImageButton
                 android:id="@+id/notif_btn_decline"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="45dp"
+                android:layout_height="45dp"
                 android:background="@drawable/circle_bg_red"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:padding="10dp"
+                android:padding="12dp"
                 android:scaleType="fitCenter" />
             
             <TextView
@@ -78,7 +78,7 @@
                 android:text="Decline"
                 android:textColor="#CBD5E1"
                 android:textSize="10sp"
-                android:layout_marginTop="2dp"/>
+                android:layout_marginTop="4dp"/>
         </LinearLayout>
 
         <LinearLayout
@@ -90,11 +90,11 @@
 
             <ImageButton
                 android:id="@+id/notif_btn_accept"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="45dp"
+                android:layout_height="45dp"
                 android:background="@drawable/circle_bg_green"
                 android:src="@android:drawable/ic_menu_call"
-                android:padding="10dp"
+                android:padding="12dp"
                 android:scaleType="fitCenter" />
 
             <TextView
@@ -103,7 +103,7 @@
                 android:text="Answer"
                 android:textColor="#CBD5E1"
                 android:textSize="10sp"
-                android:layout_marginTop="2dp"/>
+                android:layout_marginTop="4dp"/>
         </LinearLayout>
 
     </LinearLayout>

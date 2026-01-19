@@ -1,13 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
+// 🟢 UPDATED: Import Redux Hook
+import { useAuth } from '../hooks/useAuth';
+
 export default function SettingsScreen() {
   const router = useRouter();
+  
+  // 🟢 UPDATED: Use Redux Logout
+  const { logout } = useAuth();
 
   const handleLogout = async () => {
     Alert.alert(
@@ -18,12 +23,11 @@ export default function SettingsScreen() {
         { 
           text: "Log Out", 
           style: "destructive", 
-          onPress: async () => {
-            // 1. Clear the stored session
-            await AsyncStorage.removeItem('user_phone');
-            
-            // 2. Redirect to Login Screen and replace history
-            router.replace('/login'); 
+          onPress: () => {
+            // 🟢 CALL REDUX LOGOUT
+            // This clears storage and state immediately.
+            // The AuthGuard in _layout.tsx will detect this and redirect to /login.
+            logout(); 
           }
         }
       ]
@@ -41,30 +45,26 @@ export default function SettingsScreen() {
   );
 
   return (
-    // 🟢 edges={['top']} ensures the header starts below the punch-hole
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
       
-      {/* 🟢 HIDE NATIVE HEADER */}
       <Stack.Screen options={{ headerShown: false }} />
       
-      {/* 🟢 CUSTOM HEADER (Visible & Safe) */}
+      {/* CUSTOM HEADER */}
       <View style={styles.customHeader}>
          <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={styles.headerIcon}
+           onPress={() => router.back()} 
+           style={styles.headerIcon}
          >
             <Ionicons name="arrow-back" size={24} color="black" />
          </TouchableOpacity>
          
          <Text style={styles.headerTitle}>Settings</Text>
          
-         {/* Invisible spacer to keep Title perfectly centered */}
          <View style={{ width: 40 }} /> 
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Menu Items */}
         <SettingItem icon="cog-outline" label="General" />
         <SettingItem icon="volume-high" label="Sounds" />
         <SettingItem icon="web" label="App Language" />
@@ -97,7 +97,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   
-  // 🟢 CUSTOM HEADER STYLES
   customHeader: {
     height: 56,
     flexDirection: 'row',

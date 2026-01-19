@@ -7,15 +7,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Circle } from 'react-native-svg';
-import { useUser } from '../context/UserContext'; 
+import axios from 'axios'; 
+import { API_BASE_URL } from '../constants/config';
 
-// --- RANDOM SUGGESTED SKILLS ---
+// Import Redux Hook
+import { useAuth } from '../hooks/useAuth'; 
+
 const SUGGESTED_SKILLS = [
   "UI/UX Design", "React Native", "Marketing", "Project Management", 
   "Sales", "Python", "Photography", "Leadership", "Public Speaking", "Data Analysis"
 ];
 
-// --- INPUT COMPONENT ---
 const InputGroup = ({ label, value, onChangeText, keyboardType='default', multiline=false }: any) => (
   <View style={styles.inputGroup}>
     <Text style={styles.label}>{label}</Text>
@@ -31,7 +33,6 @@ const InputGroup = ({ label, value, onChangeText, keyboardType='default', multil
   </View>
 );
 
-// --- PROGRESS CIRCLE COMPONENT ---
 const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
   const radius = 55;
   const stroke = 4;
@@ -68,15 +69,17 @@ const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user, updateUser, saveUserToDB, loading } = useUser();
+  const { user, updateUser } = useAuth(); 
+
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- LOGIC: Calculate Completion ---
+  // 🟢 UPDATED: Calculate progress based on separated names
   const calculateProgress = () => {
     if (!user) return 0;
     const textFields = [
-      user.firstName, user.lastName, user.email, user.secondPhoneNumber,
+      user.firstName, user.lastName, user.email, user.phoneNumber,
+      user.secondPhoneNumber,
       user.birthday, user.gender, user.aboutMe, user.profilePhoto,
       user.address?.street, user.address?.city, user.address?.zipCode, user.address?.country,
       user.company?.title, user.company?.website
@@ -106,38 +109,48 @@ export default function EditProfileScreen() {
   };
 
   const handleNestedChange = (parent: string, key: string, value: string) => {
-    const currentObj = user[parent] || {};
+    const currentObj = (user as any)[parent] || {};
     updateUser({ [parent]: { ...currentObj, [key]: value } });
   };
 
-  // --- LOGIC: Tags Management ---
   const addTag = (tagToAdd: string) => {
     const cleanTag = tagToAdd.trim();
-    if (cleanTag && !user.tags?.includes(cleanTag)) {
-      const newTags = [...(user.tags || []), cleanTag];
+    if (cleanTag && !user?.tags?.includes(cleanTag)) {
+      const newTags = [...(user?.tags || []), cleanTag];
       updateUser({ tags: newTags });
     }
-    setTagInput(''); // Clear input if used
+    setTagInput(''); 
   };
 
   const removeTag = (index: number) => {
-    const newTags = user.tags.filter((_:any, i:number) => i !== index);
+    const newTags = user?.tags?.filter((_:any, i:number) => i !== index);
     updateUser({ tags: newTags });
   };
 
   const handleManualSave = async () => {
+    if (!user) return;
     setIsSaving(true);
-    const success = await saveUserToDB(); 
-    setIsSaving(false);
-    if (success) {
-      Alert.alert("Success", "Profile updated successfully!");
-      router.back();
-    } else {
-      Alert.alert("Error", "Could not save profile.");
+
+    try {
+        const payload = { ...user };
+        const res = await axios.put(`${API_BASE_URL}/profile/update`, payload);
+
+        if (res.data.success) {
+            updateUser(res.data.data);
+            Alert.alert("Success", "Profile updated successfully!");
+            router.back();
+        } else {
+            Alert.alert("Error", "Could not save profile.");
+        }
+    } catch (error) {
+        console.error(error);
+        Alert.alert("Error", "Failed to connect to server.");
+    } finally {
+        setIsSaving(false);
     }
   };
 
-  if (loading || !user) return (
+  if (!user) return (
     <View style={styles.center}><ActivityIndicator size="large" color="#0056D2" /></View>
   );
 
@@ -145,7 +158,6 @@ export default function EditProfileScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#000" />
@@ -169,17 +181,20 @@ export default function EditProfileScreen() {
           
           <ProfileProgress percentage={calculateProgress()} imageUri={user.profilePhoto} onEdit={pickImage} />
 
-          {/* PERSONAL DETAILS */}
           <Text style={styles.sectionHeader}>Personal Info</Text>
           <View style={styles.card}>
+            {/* 🟢 UPDATED: Removed single "Full Name" input */}
+            
             <View style={styles.row}>
-               <View style={{flex: 1, marginRight: 10}}>
-                 <InputGroup label="First Name" value={user.firstName} onChangeText={(t: string) => handleChange('firstName', t)} />
-               </View>
-               <View style={{flex: 1}}>
-                 <InputGroup label="Last Name" value={user.lastName} onChangeText={(t: string) => handleChange('lastName', t)} />
-               </View>
+                <View style={{flex: 1, marginRight: 10}}>
+                  {/* 🟢 UPDATED: Removed "Optional" tag */}
+                  <InputGroup label="First Name" value={user.firstName} onChangeText={(t: string) => handleChange('firstName', t)} />
+                </View>
+                <View style={{flex: 1}}>
+                  <InputGroup label="Last Name" value={user.lastName} onChangeText={(t: string) => handleChange('lastName', t)} />
+                </View>
             </View>
+
             <View style={styles.readOnlyField}>
                <Text style={styles.label}>Phone Number</Text>
                <Text style={styles.readOnlyText}>{user.phoneNumber}</Text>
@@ -197,7 +212,6 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          {/* ADDRESS */}
           <Text style={styles.sectionHeader}>Location</Text>
           <View style={styles.card}>
             <InputGroup label="Street Address" value={user.address?.street} onChangeText={(t: string) => handleNestedChange('address', 'street', t)} />
@@ -212,17 +226,15 @@ export default function EditProfileScreen() {
             <InputGroup label="Country" value={user.address?.country} onChangeText={(t: string) => handleNestedChange('address', 'country', t)} />
           </View>
 
-          {/* PROFESSIONAL & SKILLS */}
           <Text style={styles.sectionHeader}>Professional & Skills</Text>
           <View style={styles.card}>
             <InputGroup label="Job Title" value={user.company?.title} onChangeText={(t: string) => handleNestedChange('company', 'title', t)} />
             <InputGroup label="Website" value={user.company?.website} onChangeText={(t: string) => handleNestedChange('company', 'website', t)} keyboardType="url" />
             <InputGroup label="About Me" value={user.aboutMe} onChangeText={(t: string) => handleChange('aboutMe', t)} multiline={true} />
 
-            {/* --- 1. SELECTED TAGS --- */}
             <Text style={styles.label}>Your Skills</Text>
             <View style={styles.tagRow}>
-              {user.tags?.length > 0 ? user.tags.map((tag:string, i:number) => (
+              {user.tags && user.tags.length > 0 ? user.tags.map((tag:string, i:number) => (
                 <TouchableOpacity key={i} style={styles.tagPillSelected} onPress={() => removeTag(i)}>
                    <Text style={styles.tagTextSelected}>{tag}</Text>
                    <Ionicons name="close-circle" size={16} color="#FFF" style={{marginLeft:4}} />
@@ -232,7 +244,6 @@ export default function EditProfileScreen() {
               )}
             </View>
 
-            {/* --- 2. ADD CUSTOM TAG --- */}
             <View style={[styles.tagInputContainer, { marginTop: 15 }]}>
                <TextInput 
                  style={{flex:1, fontSize:15}} 
@@ -246,11 +257,9 @@ export default function EditProfileScreen() {
                </TouchableOpacity>
             </View>
 
-            {/* --- 3. SUGGESTED SKILLS --- */}
             <Text style={[styles.label, {marginTop: 15}]}>Suggestions</Text>
             <View style={styles.tagRow}>
               {SUGGESTED_SKILLS.map((skill, index) => {
-                // Only show if not already selected
                 if (user.tags?.includes(skill)) return null;
                 return (
                   <TouchableOpacity key={index} style={styles.tagPillSuggestion} onPress={() => addTag(skill)}>
@@ -262,7 +271,6 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          {/* Bottom Padding for Scroll */}
           <View style={{height: 350}} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -279,15 +287,11 @@ const styles = StyleSheet.create({
   saveBtnContainer: { minWidth: 50, alignItems: 'flex-end', padding: 5 },
   saveText: { fontSize: 16, fontWeight: 'bold', color: '#0056D2' },
   content: { padding: 20 },
-  
-  // Avatar
   avatarSection: { alignItems: 'center', marginBottom: 25 },
   avatarWrapper: { width: 120, height: 120, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   avatar: { width: 100, height: 100, borderRadius: 50 },
   cameraBtn: { position: 'absolute', bottom: 10, right: 10, backgroundColor: '#0056D2', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   progressText: { color: '#0056D2', fontWeight: '600', fontSize: 14 },
-
-  // Forms
   sectionHeader: { fontSize: 14, fontWeight: 'bold', color: '#555', marginTop: 15, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 },
   card: { backgroundColor: '#FFF', borderRadius: 16, padding: 15, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 2 },
   inputGroup: { marginBottom: 15 },
@@ -297,18 +301,11 @@ const styles = StyleSheet.create({
   readOnlyField: { marginBottom: 15 },
   readOnlyText: { backgroundColor: '#EFEFEF', borderRadius: 10, padding: 12, fontSize: 16, color: '#888', borderWidth: 1, borderColor: '#DDD' },
   row: { flexDirection: 'row' },
-
-  // Tags Styles
   tagInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F7FA', borderRadius: 10, padding: 8, paddingLeft: 12, borderWidth: 1, borderColor: '#E1E8ED' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  
-  // Selected Tag (Blue)
   tagPillSelected: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0056D2', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
   tagTextSelected: { color: '#FFF', fontWeight: '600', fontSize: 13 },
-  
-  // Suggestion Tag (Grey)
   tagPillSuggestion: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F2F5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#E1E8ED' },
   tagTextSuggestion: { color: '#444', fontWeight: '500', fontSize: 13 },
-  
   placeholderText: { fontStyle: 'italic', color: '#999', fontSize: 13 }
 });

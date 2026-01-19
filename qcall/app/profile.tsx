@@ -14,7 +14,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router'; 
 import Svg, { Circle } from 'react-native-svg'; 
 import { StatusBar } from 'expo-status-bar';
-import { useUser } from '../context/UserContext'; 
+
+// 🟢 Import Redux Hook
+import { useAuth } from '../hooks/useAuth'; 
 
 const COLORS = {
   bg: '#FFFFFF',
@@ -31,15 +33,22 @@ const COLORS = {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, loading } = useUser();
+  const { user, loading } = useAuth();
 
+  // 🟢 UPDATED: Calculate progress based on First/Last Name
   const calculateProgress = () => {
     if (!user) return 0;
+    
     const fields = [
-      user.firstName, user.lastName, user.email, user.secondPhoneNumber,
-      user.birthday, user.gender, user.address?.street, user.company?.title, user.aboutMe, user.profilePhoto
+      user.firstName, 
+      user.lastName, 
+      user.email, 
+      user.phoneNumber, 
+      user.profilePhoto
     ];
-    const filled = fields.filter(f => f && f.length > 0).length;
+    
+    // Filter out empty or undefined fields
+    const filled = fields.filter(f => f && f.trim().length > 0).length;
     return Math.round((filled / fields.length) * 100);
   };
 
@@ -67,7 +76,7 @@ export default function ProfileScreen() {
     </TouchableOpacity>
   );
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -75,50 +84,43 @@ export default function ProfileScreen() {
     );
   }
 
-  const displayName = user.firstName 
-    ? `${user.firstName} ${user.lastName}` 
-    : "Guest User";
+  // 🟢 UPDATED: Logic to construct Full Name
+  const displayName = (user?.firstName && user?.lastName) 
+    ? `${user.firstName} ${user.lastName}`
+    : user?.name || "Guest User";
+
+  // 🟢 UPDATED: Logic for Initials (First letter of First Name)
+  const initials = user?.firstName 
+    ? user.firstName.charAt(0).toUpperCase() 
+    : displayName.charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}> 
       <StatusBar style="dark" />
-      
-      {/* Disable Native Header to use Custom Header below */}
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* 🟢 FIXED CUSTOM HEADER WITH BACK BUTTON */}
+      {/* HEADER */}
       <View style={styles.customHeader}>
-         <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={styles.headerIcon}
-         >
+         <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
             <Ionicons name="arrow-back" size={24} color="black" />
          </TouchableOpacity>
          
          <Text style={styles.headerTitle}>{displayName}</Text>
          
-         <TouchableOpacity 
-            onPress={() => router.push('/settings')} 
-            style={styles.headerIcon}
-         >
+         <TouchableOpacity onPress={() => router.push('/settings')} style={styles.headerIcon}>
             <Ionicons name="settings-outline" size={24} color="black" />
          </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={styles.scrollContent}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Phone Number */}
-        <Text style={styles.subHeaderPhone}>{user.phoneNumber}</Text>
+        <Text style={styles.subHeaderPhone}>{user?.phoneNumber}</Text>
 
         {/* PROFILE CARD */}
         <View style={styles.completionCard}>
           <View style={styles.avatarWrapper}>
              <Svg height="110" width="110" style={styles.svgOverlay}>
-                <Circle
-                  stroke="#E3F2FD" cx="55" cy="55" r={radius} strokeWidth={4}
-                />
+                <Circle stroke="#E3F2FD" cx="55" cy="55" r={radius} strokeWidth={4} />
                 <Circle
                   stroke={COLORS.primary} cx="55" cy="55" r={radius} strokeWidth={4}
                   strokeDasharray={circumference}
@@ -130,12 +132,10 @@ export default function ProfileScreen() {
              </Svg>
 
              <View style={styles.imageContainer}>
-                {user.profilePhoto ? (
+                {user?.profilePhoto ? (
                   <Image source={{ uri: user.profilePhoto }} style={styles.realImage} />
                 ) : (
-                  <Text style={styles.initialsText}>
-                    {displayName.charAt(0).toUpperCase()}
-                  </Text>
+                  <Text style={styles.initialsText}>{initials}</Text>
                 )}
              </View>
 
@@ -145,9 +145,9 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.photoStatusContainer}>
-            <Ionicons name={user.profilePhoto ? "checkmark-circle" : "camera"} size={14} color="#555" /> 
+            <Ionicons name={user?.profilePhoto ? "checkmark-circle" : "camera"} size={14} color="#555" /> 
             <Text style={styles.addPhotoText}>
-                {user.profilePhoto ? " Lookin' good!" : " Add profile picture"}
+                {user?.profilePhoto ? " Lookin' good!" : " Add profile picture"}
             </Text>
           </View>
 
@@ -206,7 +206,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
   
-  // 🟢 CUSTOM HEADER
   customHeader: {
     height: 56,
     flexDirection: 'row',

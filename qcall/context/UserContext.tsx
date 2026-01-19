@@ -3,13 +3,32 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../constants/config';
 
-// ⚠️ CONFIRM YOUR IP
-
-const endpoint='/profile';
-
+// API Configuration
+const endpoint = '/profile';
 const API_URL = `${API_BASE_URL}${endpoint}`; 
 
-const UserContext = createContext<any>(null);
+// 🟢 Define Types
+interface UserContextType {
+  user: any;
+  loading: boolean;
+  checkUserExists: (phone: string) => Promise<boolean>; // 🟢 NEW FUNCTION
+  loadUser: () => Promise<void>;
+  login: (phone: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  updateUser: (updates: any) => void;
+  saveUserToDB: () => Promise<boolean>;
+}
+
+const UserContext = createContext<UserContextType>({
+  user: null,
+  loading: true,
+  checkUserExists: async () => false,
+  loadUser: async () => {},
+  login: async () => false,
+  logout: async () => {},
+  updateUser: () => {},
+  saveUserToDB: async () => false,
+});
 
 export const UserProvider = ({ children }: any) => {
   const [user, setUser] = useState<any>(null);
@@ -21,13 +40,17 @@ export const UserProvider = ({ children }: any) => {
   }, []);
 
   const loadUser = async () => {
+    setLoading(true);
     try {
       const phone = await AsyncStorage.getItem('user_phone');
+      
       if (phone) {
         // Fetch fresh data from DB
         const res = await axios.get(`${API_URL}/${phone}`);
         if (res.data.success) {
           setUser(res.data.data);
+        } else {
+          setUser(null);
         }
       } else {
         setUser(null); // No phone found
@@ -40,10 +63,31 @@ export const UserProvider = ({ children }: any) => {
     }
   };
 
-  // --- NEW: LOGIN FUNCTION ---
+  // 🟢 1. LOGIC UPDATE: Check Server (Not Local Storage)
+  // This function is called by login.tsx to decide whether to show OTP or Register screen
+  const checkUserExists = async (phoneNumber: string) => {
+    try {
+      console.log(`[Context] Checking if ${phoneNumber} exists on server...`);
+      // Assuming GET /api/profile/{phone} returns 200 (Found) or 404 (Not Found)
+      const res = await axios.get(`${API_URL}/${phoneNumber}`);
+      return res.data.success; 
+    } catch (e: any) {
+      // If server returns 404, it means user does NOT exist
+      if (e.response && e.response.status === 404) {
+        return false; 
+      }
+      // If other error (e.g., network), return false to be safe
+      return false; 
+    }
+  };
+
+  // --- LOGIN FUNCTION ---
   const login = async (phoneNumber: string) => {
     try {
       await AsyncStorage.setItem('user_phone', phoneNumber);
+      // If you implement tokens later, save them here:
+      // await AsyncStorage.setItem('user_token', token);
+      
       const res = await axios.get(`${API_URL}/${phoneNumber}`);
       
       if (res.data.success) {
@@ -56,10 +100,18 @@ export const UserProvider = ({ children }: any) => {
     return false;
   };
 
-  // --- NEW: LOGOUT FUNCTION ---
+  // --- LOGOUT FUNCTION ---
   const logout = async () => {
-    await AsyncStorage.removeItem('user_phone');
-    setUser(null);
+    try {
+      // 1. Clear all Auth keys
+      await AsyncStorage.removeItem('user_phone');
+      await AsyncStorage.removeItem('user_token'); 
+      
+      // 2. Reset State (Triggers AuthGuard)
+      setUser(null);
+    } catch (e) {
+      console.error("Logout failed", e);
+    }
   };
 
   const updateUser = (updates: any) => {
@@ -82,8 +134,7 @@ export const UserProvider = ({ children }: any) => {
   };
 
   return (
-    // 🔴 ADDED 'loadUser' HERE so register.tsx can use it
-    <UserContext.Provider value={{ user, updateUser, saveUserToDB, login, logout, loading, loadUser }}>
+    <UserContext.Provider value={{ user, checkUserExists, updateUser, saveUserToDB, login, logout, loading, loadUser }}>
       {children}
     </UserContext.Provider>
   );

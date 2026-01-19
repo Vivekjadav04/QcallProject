@@ -14,8 +14,8 @@ import CallLogs from 'react-native-call-log';
 import * as Contacts from 'expo-contacts'; 
 import { useRouter, useFocusEffect } from 'expo-router';
 
-// Services & Context
-import { useUser } from '../../context/UserContext';
+// 🟢 Services & Redux Hook
+import { useAuth } from '../../hooks/useAuth'; // Replaces useUser
 import { CallService } from '../../services/CallService'; 
 import DialerModal from '../../components/DialerModal'; 
 
@@ -55,8 +55,7 @@ const getDayLabel = (ts: number) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// --- COMPONENTS ---
-
+// --- HEADER COMPONENT ---
 const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -68,6 +67,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
           <Text style={styles.headerTitle}>Recents</Text>
         </View>
         <TouchableOpacity style={styles.profileBtn} onPress={onProfilePress} activeOpacity={0.8}>
+           {/* 🟢 Display Profile Photo if available */}
            {userPhoto ? (
              <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
            ) : (
@@ -113,17 +113,13 @@ const AdCard = () => (
   </View>
 );
 
-// 🟢 DEBUG BUTTONS (Aligned with Single Activity Architecture)
 const DebugButtons = () => {
-  
   const testIncomingLocked = () => {
     CallManagerModule.launchTestIncomingUI("Elon Musk", "+1 (555) 019-9999");
   };
-
   const testIncomingUnlocked = () => {
     CallManagerModule.showTestNotification("Jeff Bezos", "+1 (555) 020-8888");
   };
-
   const testActiveCall = () => {
     CallManagerModule.launchTestOutgoingUI("Bill Gates", "+1 (555) 030-7777");
   };
@@ -233,7 +229,9 @@ const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
 export default function CallLogScreen() {
   const router = useRouter(); 
   const insets = useSafeAreaInsets();
-  const { user } = useUser();
+  
+  // 🟢 Use Redux to get user data
+  const { user } = useAuth(); 
   
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
   const [refreshing, setRefreshing] = useState(false);
@@ -244,13 +242,12 @@ export default function CallLogScreen() {
 
   const tabAnim = useRef(new Animated.Value(0)).current;
 
-  // --- 1. DATA LOADING ---
+  // --- DATA LOADING ---
   const loadData = async () => {
     try {
       if (Platform.OS === 'android') {
         const hasPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
         if (!hasPerm) {
-          // If NOT granted, just set state. DO NOT REQUEST here.
           setPermissionGranted(false);
           return; 
         }
@@ -301,7 +298,6 @@ export default function CallLogScreen() {
       const init = async () => {
         CallService.preloadContacts();
         if (Platform.OS === 'android') {
-          // 🟢 CHECK ONLY - NO AUTO REQUEST
           const hasLogPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
           if (hasLogPerm) {
              loadData();
@@ -316,13 +312,12 @@ export default function CallLogScreen() {
     }, [])
   );
 
-  // 🟢 NEW: Manual Permission Requester (Linked to Error UI)
   const manualPermissionRequest = async () => {
     if (Platform.OS === 'android') {
        try {
          const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
          if (status === PermissionsAndroid.RESULTS.GRANTED) {
-            loadData();
+           loadData();
          }
        } catch (e) { console.error(e); }
     }
@@ -333,13 +328,11 @@ export default function CallLogScreen() {
     Animated.spring(tabAnim, { toValue: tab === 'Home' ? 0 : 1, useNativeDriver: false }).start();
   };
 
-  // --- 2. MAKE A CALL ---
   const handleNativeCall = useCallback(async (name: string | null, number: string) => {
     const cleanNumber = normalizeNumber(number);
     
     if (Platform.OS === 'android') {
         try {
-            // STEP 1: Check Default Dialer
             let isDefault = false;
             try {
                  isDefault = await CallManagerModule.checkIsDefaultDialer();
@@ -347,7 +340,6 @@ export default function CallLogScreen() {
                  console.warn("Module check failed, assuming false", err);
             }
             
-            // STEP 2: Handle Permissions
             if (!isDefault) {
                 Alert.alert(
                     "Permission Required",
@@ -366,14 +358,12 @@ export default function CallLogScreen() {
                 return; 
             }
 
-            // STEP 3: Start Call (The Native Service handles the UI launch)
             CallManagerModule.startCall(cleanNumber);
             
         } catch (e) {
             Alert.alert("Error", "Could not initiate call service.");
         }
     } else {
-        // iOS Fallback
         Linking.openURL(`tel:${cleanNumber}`);
     }
   }, [router]);
@@ -415,13 +405,12 @@ export default function CallLogScreen() {
         <HeaderComponent 
            searchText={searchText} 
            setSearchText={setSearchText} 
+           // 🟢 Pass the Profile Photo correctly
            userPhoto={user?.profilePhoto} 
            onProfilePress={() => router.push('/profile')} 
         />
         
         <AdCard />
-
-        {/* 🟢 CONNECTED DEBUG BUTTONS */}
         <DebugButtons />
 
         <View style={styles.tabWrapper}>
@@ -439,7 +428,6 @@ export default function CallLogScreen() {
         </View>
 
         {!permissionGranted && (
-            // 🟢 UPDATED: OnPress calls manualPermissionRequest
             <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>
                 <Feather name="alert-triangle" size={16} color="#DC2626" />
                 <Text style={styles.permErrorText}>Permission needed. Tap to enable.</Text>
@@ -474,7 +462,6 @@ export default function CallLogScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Modal Logic */}
         <DialerModal visible={dialerVisible} onClose={() => setDialerVisible(false)} masterLogs={masterLogs} onCallPress={handleNativeCall} />
         
       </SafeAreaView>
@@ -485,7 +472,6 @@ export default function CallLogScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.colors.bg },
   
-  // Header
   headerWrapper: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '600', textTransform: 'uppercase' },
@@ -494,12 +480,10 @@ const styles = StyleSheet.create({
   avatarImage: { width: 44, height: 44, borderRadius: 16, borderWidth: 2, borderColor: '#FFF' },
   avatarPlaceholder: { width: 44, height: 44, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   
-  // Search
   searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 48, borderRadius: 16, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5 },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
   filterIcon: { padding: 4 },
 
-  // Ad Card
   adWrapper: { paddingHorizontal: 20, marginBottom: 15 },
   adCard: { borderRadius: 20, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
   adBadge: { backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 6 },
@@ -508,14 +492,12 @@ const styles = StyleSheet.create({
   adDesc: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
   adIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
 
-  // DEBUG STYLES
   debugContainer: { paddingHorizontal: 20, marginBottom: 15 },
   debugLabel: { fontSize: 10, color: '#94A3B8', fontWeight: '700', marginBottom: 5, letterSpacing: 1 },
   debugRow: { flexDirection: 'row', gap: 10 },
   debugBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   debugText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 13 },
 
-  // Tabs
   tabWrapper: { paddingHorizontal: 20, marginBottom: 10 },
   tabContainer: { flexDirection: 'row', height: 48, backgroundColor: THEME.colors.tabBg, borderRadius: 16, padding: 4, position: 'relative' },
   tabActive: { position: 'absolute', top: 4, bottom: 4, width: '50%', backgroundColor: '#FFF', borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4 },
@@ -523,11 +505,9 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
   tabTextActive: { color: THEME.colors.textMain, fontWeight: '700' },
 
-  // Sections
   sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },
 
-  // Card Item
   cardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 20, marginBottom: 8, padding: 14, borderRadius: 18, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#F1F5F9' },
   squircleAvatar: { width: 46, height: 46, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   missedAvatarBg: { backgroundColor: THEME.colors.dangerBg },
@@ -548,11 +528,9 @@ const styles = StyleSheet.create({
 
   callBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 10, shadowColor: THEME.colors.primary, shadowOpacity: 0.3, shadowRadius: 8 },
 
-  // FAB
   fab: { position: 'absolute', right: 20, shadowColor: THEME.colors.primary, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10 },
   fabGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
 
-  // States
   permErrorBox: { marginHorizontal: 20, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FECACA' },
   permErrorText: { color: '#DC2626', fontWeight: '600', fontSize: 13, marginLeft: 8 },
   emptyState: { alignItems: 'center', marginTop: 60, opacity: 0.7 },

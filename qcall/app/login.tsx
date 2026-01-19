@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
   Alert, Animated, ActivityIndicator, KeyboardAvoidingView, 
-  Platform, Keyboard, Easing, Dimensions, PermissionsAndroid 
+  Platform, Keyboard, Easing, Dimensions 
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,17 +10,15 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient'; 
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Contexts & Config
-import { useUser } from '../context/UserContext'; 
+// 🟢 Import Redux Hook
+import { useAuth } from '../hooks/useAuth'; 
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-// Animated Background Particle Component
+// Background Particle Component
 const Particle = ({ size, initialX, initialY, duration, delay }: any) => {
   const anim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -28,21 +26,17 @@ const Particle = ({ size, initialX, initialY, duration, delay }: any) => {
         Animated.timing(anim, { toValue: 0, duration: duration, useNativeDriver: true, easing: Easing.inOut(Easing.sin) })
       ])
     ).start();
-  }, [anim, delay, duration]);
-
+  }, []);
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -30] });
   const opacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.1, 0.4, 0.1] });
-
-  return (
-    <Animated.View style={[styles.particle, { 
-      width: size, height: size, left: initialX, top: initialY, opacity, transform: [{ translateY }] 
-    }]} />
-  );
+  return <Animated.View style={[styles.particle, { width: size, height: size, left: initialX, top: initialY, opacity, transform: [{ translateY }] }]} />;
 };
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loadUser } = useUser(); 
+  
+  // 🟢 Use Redux Hook
+  const { checkUserExists } = useAuth(); 
 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,14 +53,10 @@ export default function LoginScreen() {
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true, easing: Easing.out(Easing.exp) }),
       Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true, easing: Easing.out(Easing.exp) })
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, []);
 
-  const onPressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true }).start();
-  };
-  const onPressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
-  };
+  const onPressIn = () => Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true }).start();
+  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }).start();
 
   const handleNext = async () => {
     Keyboard.dismiss();
@@ -80,54 +70,52 @@ export default function LoginScreen() {
 
     setLoading(true);
 
-    const completeLogin = async () => {
-      try {
-        await AsyncStorage.setItem('user_phone', phoneNumber);
-        await loadUser();
+    try {
+        console.log(`[Login] Checking if user ${phoneNumber} exists...`);
+        
+        // 🟢 1. Check if user exists (Server Side)
+        const exists = await checkUserExists(phoneNumber);
+        
+        setLoading(false);
 
-        // 🟢 Requesting permissions after login (Android only)
-        if (Platform.OS === 'android') {
-          await PermissionsAndroid.requestMultiple([
-            PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
-            PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
-            PermissionsAndroid.PERMISSIONS.READ_SMS,
-          ]);
+        if (exists) {
+            // 🟢 A. User Exists -> Go to OTP Screen
+            // (The OTP Screen will handle the redirect to Welcome)
+            console.log("[Login] User found. Routing to OTP.");
+            router.push({
+                pathname: "/otp",
+                // Pass devMode status to allow skipping OTP if ON
+                params: { phoneNumber, bypass: devMode ? 'true' : 'false' } 
+            });
+        } else {
+            // 🟢 B. New User -> Go to Register Screen
+            // (The Register Screen will handle the redirect to Welcome)
+            console.log("[Login] New user. Routing to Register.");
+            router.push({
+                pathname: "/register",
+                params: { phoneNumber, bypass: devMode ? 'true' : 'false' }
+            });
         }
-
+    } catch (e) {
         setLoading(false);
-        router.replace("/(tabs)");
-      } catch (error) {
-        setLoading(false);
-        console.error("Login Error:", error);
-      }
-    };
-
-    if (devMode) {
-      setTimeout(completeLogin, 800);
-      return;
+        console.error("Login Check Error:", e);
+        Alert.alert("Connection Error", "Could not verify user status. Please check your internet.");
     }
-    
-    // Simulate real flow (OTP)
-    setLoading(false);
-    router.push({ pathname: "/otp", params: { phoneNumber } });
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       <Stack.Screen options={{ headerShown: false }} />
-      
       <LinearGradient colors={['#0F172A', '#1E293B', '#111']} style={StyleSheet.absoluteFillObject} />
       
       <Particle size={120} initialX={-30} initialY={150} duration={5000} delay={0} />
       <Particle size={80} initialX={width - 50} initialY={400} duration={6000} delay={1000} />
 
       <SafeAreaView style={{ flex: 1 }}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-          style={styles.keyboardView}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
           <Animated.View style={[styles.contentContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            
             <View style={styles.header}>
               <View style={styles.iconCircle}>
                 <Ionicons name="call" size={32} color="#FFF" />
@@ -161,9 +149,9 @@ export default function LoginScreen() {
 
               <TouchableOpacity 
                 onPress={handleNext} 
-                onPressIn={onPressIn}
-                onPressOut={onPressOut}
-                disabled={loading}
+                onPressIn={onPressIn} 
+                onPressOut={onPressOut} 
+                disabled={loading} 
                 activeOpacity={1}
               >
                 <Animated.View style={[styles.btnMain, { transform: [{ scale: scaleAnim }] }]}>
@@ -176,7 +164,9 @@ export default function LoginScreen() {
                       <ActivityIndicator color="#FFF" />
                     ) : (
                       <View style={styles.btnContent}>
-                        <Text style={styles.btnText}>{devMode ? "Bypass & Login" : "Get OTP"}</Text>
+                        <Text style={styles.btnText}>
+                            {devMode ? "Continue (Dev)" : "Get OTP"}
+                        </Text>
                         <Feather name="arrow-right" size={20} color="#FFF" />
                       </View>
                     )}
@@ -197,10 +187,11 @@ export default function LoginScreen() {
             >
               <MaterialIcons name={devMode ? "lock-open" : "lock"} size={14} color={devMode ? "#4ADE80" : "#94A3B8"} />
               <Text style={[styles.devText, devMode && styles.devTextActive]}>
-                Dev Mode: {devMode ? "ON" : "OFF"}
+                Dev Mode: {devMode ? "ON (Skip OTP)" : "OFF"}
               </Text>
             </TouchableOpacity>
           </View>
+
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
@@ -217,8 +208,7 @@ const styles = StyleSheet.create({
     width: 70, height: 70, borderRadius: 22,
     backgroundColor: 'rgba(59, 130, 246, 0.15)',
     justifyContent: 'center', alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)',
+    marginBottom: 16, borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)',
   },
   title: { fontSize: 34, fontWeight: '800', color: '#FFF', letterSpacing: 1 },
   subtitle: { fontSize: 14, color: '#94A3B8', marginTop: 4 },

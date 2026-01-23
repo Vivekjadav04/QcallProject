@@ -2,62 +2,92 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
   SectionList, Vibration, LayoutAnimation, Platform, UIManager,
-  ToastAndroid, TextInput, Alert, GestureResponderEvent, RefreshControl, NativeModules
+  ToastAndroid, TextInput, GestureResponderEvent, RefreshControl, NativeModules
+  // ❌ REMOVED: Alert
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Contacts from 'expo-contacts'; 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import sectionListGetItemLayout from 'react-native-section-list-get-item-layout';
 import { useRouter, useFocusEffect } from 'expo-router'; 
-import { useUser } from '../../context/UserContext'; 
 
-// 🟢 IMPORT NATIVE MODULE
+// 🟢 Services & Config
+import { useAuth } from '../../hooks/useAuth'; // Standardized Hook
+
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../../context/AlertContext';
+
 const { CallManagerModule } = NativeModules;
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const COLORS = {
-  primary: '#0056D2', background: '#fff', headerBg: '#fff', searchBarBg: '#F3F4F6',
-  textMain: '#1F1F1F', textSub: '#757575', divider: '#E5E7EB', fabBg: '#E3F2FD',
+const THEME = {
+  colors: {
+    bg: '#F8FAFC',
+    card: '#FFFFFF',
+    primary: '#0F172A',
+    textMain: '#1E293B',
+    textSub: '#64748B',
+    danger: '#EF4444',
+    success: '#10B981',
+    border: '#E2E8F0',
+    headerBg: '#F8FAFC' // Matches Call Log bg
+  }
 };
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-// Header Component
-const HeaderComponent = ({ searchText, setSearchText, router, userPhoto }: any) => (
-  <View style={styles.headerContainer}>
-    <View style={styles.searchBar}>
-      <TouchableOpacity style={styles.profileIconLeft} onPress={() => router.push('/(tabs)/profile')}>
-         {userPhoto ? (
-            <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
-         ) : (
-            <View style={styles.avatarImage}>
-                <Ionicons name="person" size={18} color="#FFF" />
-            </View>
-         )}
-      </TouchableOpacity>
-      <TextInput 
-        placeholder="Search contacts" placeholderTextColor="#9CA3AF" 
-        style={styles.searchInput} value={searchText} onChangeText={setSearchText}
-        clearButtonMode="while-editing"
-      />
-      <View style={styles.searchRightIcons}>
-         <TouchableOpacity style={styles.iconButton}>
-           <MaterialCommunityIcons name="qrcode-scan" size={22} color="#6B7280" />
-         </TouchableOpacity>
+// --- HEADER COMPONENT (Standardized) ---
+const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  return (
+    <View style={styles.headerWrapper}>
+      <View style={styles.topRow}>
+        <View>
+          <Text style={styles.headerDate}>{dateStr}</Text>
+          <Text style={styles.headerTitle}>Contacts</Text>
+        </View>
+        <TouchableOpacity style={styles.profileBtn} onPress={onProfilePress} activeOpacity={0.8}>
+           {userPhoto ? (
+             <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
+           ) : (
+             <View style={styles.avatarPlaceholder}>
+                <Feather name="user" size={20} color="#FFF" />
+             </View>
+           )}
+        </TouchableOpacity>
+      </View>
+      <View style={styles.searchBlock}>
+        <Feather name="search" size={18} color={THEME.colors.textSub} />
+        <TextInput 
+          placeholder="Search contacts..." 
+          placeholderTextColor={THEME.colors.textSub} 
+          style={styles.searchInput}
+          value={searchText}
+          onChangeText={setSearchText} 
+        />
+        <TouchableOpacity style={styles.filterIcon}>
+            <MaterialCommunityIcons name="qrcode-scan" size={20} color={THEME.colors.primary} />
+        </TouchableOpacity>
       </View>
     </View>
-  </View>
-);
+  );
+});
 
 export default function ContactsScreen() {
   const router = useRouter(); 
-  const { user } = useUser();
-  const userPhoto = user?.profilePhoto || null;
+  const insets = useSafeAreaInsets();
+  
+  // 🟢 Use Redux Hook
+  const { user } = useAuth();
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   const [allContacts, setAllContacts] = useState<any[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
@@ -164,7 +194,8 @@ export default function ContactsScreen() {
         await Contacts.presentFormAsync(null);
         setTimeout(loadContacts, 2000);
       } else {
-        Alert.alert("Permission Denied", "Cannot access contacts.");
+        // 🔴 ERROR ALERT
+        showAlert("Permission Denied", "We cannot access contacts to add a new one.", "error");
       }
     } catch (e) { console.log(e); }
   };
@@ -172,31 +203,31 @@ export default function ContactsScreen() {
   // 🟢 NATIVE CALL FUNCTION
   const handleNativeCall = async (rawNumber: string) => {
     if (!rawNumber) return;
-    const cleanNumber = rawNumber.replace(/[^\d+]/g, ''); // Keep only digits and +
+    const cleanNumber = rawNumber.replace(/[^\d+]/g, '');
 
     if (Platform.OS === 'android') {
         try {
             // Check if we are default dialer
             const isDefault = await CallManagerModule.checkIsDefaultDialer();
             if (!isDefault) {
-                Alert.alert(
+                // 🟠 WARNING ALERT
+                showAlert(
                     "Default Dialer Required",
                     "To make calls directly, please set QCall as your default phone app.",
-                    [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Set Default", onPress: () => CallManagerModule.requestDefaultDialer() }
-                    ]
+                    "warning",
+                    () => CallManagerModule.requestDefaultDialer()
                 );
                 return;
             }
-            // Trigger Native Call (Launches CallActivity.kt)
+            // Trigger Native Call
             CallManagerModule.startCall(cleanNumber);
         } catch (e) {
-            Alert.alert("Error", "Could not start call.");
+            // 🔴 ERROR ALERT
+            showAlert("Error", "Could not initiate call.", "error");
         }
     } else {
-        // iOS Fallback (just in case)
-        Alert.alert("Not Supported", "iOS calling not implemented yet.");
+        // 🟠 WARNING ALERT
+        showAlert("Not Supported", "iOS calling is currently not supported.", "warning");
     }
   };
 
@@ -269,7 +300,7 @@ export default function ContactsScreen() {
         style={styles.row} 
         activeOpacity={0.7} 
         onLongPress={() => !isMe && toggleFavorite(item.id)} 
-        onPress={() => handleNativeCall(rawNumber)} // 🟢 CALL NATIVE MODULE
+        onPress={() => handleNativeCall(rawNumber)} 
       >
         <View style={styles.avatarContainer}>
           {item.imageAvailable && item.image?.uri ? (
@@ -287,10 +318,8 @@ export default function ContactsScreen() {
         </View>
         <View style={styles.actionCol}>
            {isFav && <Ionicons name="heart" size={16} color="#D32F2F" style={{marginRight: 10}} />}
-           
-           {/* Call Icon explicitly triggers native call too */}
            <TouchableOpacity onPress={() => handleNativeCall(rawNumber)}>
-             <Ionicons name="call" size={22} color="#0056D2" />
+             <Ionicons name="call" size={22} color={THEME.colors.primary} />
            </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -305,7 +334,7 @@ export default function ContactsScreen() {
              <Text style={styles.actionText}>New Contact</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionCard}>
-             <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}><MaterialCommunityIcons name="account-group" size={22} color="#0056D2" /></View>
+             <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}><MaterialCommunityIcons name="account-group" size={22} color={THEME.colors.primary} /></View>
              <Text style={styles.actionText}>New Group</Text>
           </TouchableOpacity>
        </View>
@@ -320,7 +349,7 @@ export default function ContactsScreen() {
   if (!permissionGranted) {
     return (
         <View style={styles.center}>
-            <Text style={{ marginBottom: 20 }}>Contact Permission Required</Text>
+            <Text style={{ marginBottom: 20, color: THEME.colors.textMain }}>Contact Permission Required</Text>
             <TouchableOpacity onPress={loadContacts} style={styles.retryBtn}>
                 <Text style={{color: '#fff', fontWeight: 'bold'}}>Grant Permission</Text>
             </TouchableOpacity>
@@ -329,85 +358,107 @@ export default function ContactsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
       <StatusBar style="dark" />
-      <HeaderComponent searchText={search} setSearchText={setSearch} router={router} userPhoto={userPhoto} />
-      
-      <View style={{flex: 1}}>
-           <SectionList
-             ref={sectionListRef} 
-             sections={sections} 
-             keyExtractor={(item, index) => item.id + index}
-             renderItem={renderContactItem} 
-             getItemLayout={getItemLayout as any}
-             initialNumToRender={15}
-             maxToRenderPerBatch={10} 
-             windowSize={5}           
-             renderSectionHeader={({ section: { title } }) => (
-                <View style={styles.sectionHeader}>
-                   <Text style={[styles.sectionTitle, title === 'FAVORITES' && {color: '#D32F2F'}, title === 'ME' && {color: '#0056D2'}]}>{title}</Text>
-                </View>
-             )}
-             ListHeaderComponent={ListHeader}
-             ListEmptyComponent={() => (
-                loading ? <ActivityIndicator size="small" color="#0056D2" style={{marginTop: 20}} /> : <View style={styles.center}><Text>No contacts found</Text></View>
-             )}
-             contentContainerStyle={{ paddingBottom: 100 }}
-             refreshControl={
-               <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor="#0056D2" />
-             }
-           />
-           {search.length === 0 && allContacts.length > 0 && (
-             <View 
-                style={styles.azSidebar} 
-                onLayout={(e) => setSidebarHeight(e.nativeEvent.layout.height)} 
-                onStartShouldSetResponder={() => true} 
-                onResponderMove={handleSidebarTouch}
-             >
-               {ALPHABET.map(char => <View key={char} style={styles.azItem}><Text style={styles.azText}>{char}</Text></View>)}
-             </View>
-           )}
-           <TouchableOpacity style={styles.fab} onPress={createNewContact}>
-                <MaterialCommunityIcons name="content-save-plus-outline" size={24} color="#0056D2" />
-           </TouchableOpacity>
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        
+        <HeaderComponent 
+           searchText={search} 
+           setSearchText={setSearch} 
+           onProfilePress={() => router.push('/profile')}
+           userPhoto={user?.profilePhoto} 
+        />
+        
+        <View style={{flex: 1}}>
+            <SectionList
+              ref={sectionListRef} 
+              sections={sections} 
+              keyExtractor={(item, index) => item.id + index}
+              renderItem={renderContactItem} 
+              getItemLayout={getItemLayout as any}
+              initialNumToRender={15}
+              maxToRenderPerBatch={10} 
+              windowSize={5}           
+              renderSectionHeader={({ section: { title } }) => (
+                 <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, title === 'FAVORITES' && {color: '#D32F2F'}, title === 'ME' && {color: THEME.colors.primary}]}>{title}</Text>
+                 </View>
+              )}
+              ListHeaderComponent={ListHeader}
+              ListEmptyComponent={() => (
+                 loading ? <ActivityIndicator size="small" color={THEME.colors.primary} style={{marginTop: 20}} /> : <View style={styles.center}><Text style={{color: THEME.colors.textSub}}>No contacts found</Text></View>
+              )}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+              refreshControl={
+                <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={THEME.colors.primary} />
+              }
+            />
+            
+            {search.length === 0 && allContacts.length > 0 && (
+              <View 
+                 style={styles.azSidebar} 
+                 onLayout={(e) => setSidebarHeight(e.nativeEvent.layout.height)} 
+                 onStartShouldSetResponder={() => true} 
+                 onResponderMove={handleSidebarTouch}
+              >
+                {ALPHABET.map(char => <View key={char} style={styles.azItem}><Text style={styles.azText}>{char}</Text></View>)}
+              </View>
+            )}
+            
+            <TouchableOpacity style={styles.fab} onPress={createNewContact}>
+                 <MaterialCommunityIcons name="content-save-plus-outline" size={24} color="#FFF" />
+            </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: THEME.colors.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  retryBtn: { backgroundColor: '#0056D2', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
-  headerContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.searchBarBg, borderRadius: 30, paddingHorizontal: 10, height: 50 },
-  profileIconLeft: { marginRight: 10 },
-  avatarImage: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
-  searchInput: { flex: 1, fontSize: 16, color: '#000' },
-  searchRightIcons: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  iconButton: { padding: 5 },
-  listHeader: { paddingHorizontal: 15, paddingTop: 10, paddingBottom: 10, height: 180 },
+  retryBtn: { backgroundColor: THEME.colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
+  
+  // Standardized Header Styles
+  headerWrapper: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '600', textTransform: 'uppercase' },
+  headerTitle: { fontSize: 32, fontWeight: '800', color: THEME.colors.textMain, letterSpacing: -1 },
+  profileBtn: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  avatarImage: { width: 44, height: 44, borderRadius: 16, borderWidth: 2, borderColor: '#FFF' },
+  avatarPlaceholder: { width: 44, height: 44, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  
+  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 48, borderRadius: 16, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5 },
+  searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
+  filterIcon: { padding: 4 },
+
+  // List Styles
+  listHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, height: 180 },
   actionsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAFAFA', padding: 10, borderRadius: 12, width: '48%', borderWidth: 1, borderColor: '#E5E7EB' },
+  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 16, width: '48%', borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   iconCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   actionText: { fontSize: 14, fontWeight: '600', color: '#333' },
-  controlBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 10 },
+  controlBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingBottom: 10 },
   contactCount: { fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', letterSpacing: 0.5 },
-  sectionHeader: { backgroundColor: '#fff', paddingHorizontal: 15, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', height: 36 },
+  
+  sectionHeader: { backgroundColor: THEME.colors.bg, paddingHorizontal: 20, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', height: 36 },
   sectionTitle: { fontSize: 13, fontWeight: '900', color: '#9CA3AF', letterSpacing: 0.5 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 15, backgroundColor: '#fff', height: 70 }, 
-  avatarContainer: { marginRight: 15 },
-  avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  realImage: { width: 44, height: 44, borderRadius: 22 },
+  
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#FFF', height: 72, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }, 
+  avatarContainer: { marginRight: 16 },
+  avatar: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
+  realImage: { width: 46, height: 46, borderRadius: 23 },
   avatarText: { fontSize: 18, fontWeight: 'bold', color: '#555' },
   qBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#DDD', alignItems: 'center', justifyContent: 'center', elevation: 2 },
   qText: { color: '#000', fontSize: 9, fontWeight: 'bold' },
   info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: '#000', marginBottom: 3 },
-  number: { color: '#6B7280', fontSize: 13 },
-  actionCol: { flexDirection: 'row', alignItems: 'center', marginRight: 15 },
-  azSidebar: { position: 'absolute', right: 0, top: 180, bottom: 100, width: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.9)', zIndex: 50 },
+  name: { fontSize: 16, fontWeight: '600', color: THEME.colors.textMain, marginBottom: 3 },
+  number: { color: THEME.colors.textSub, fontSize: 13 },
+  actionCol: { flexDirection: 'row', alignItems: 'center' },
+  
+  azSidebar: { position: 'absolute', right: 0, top: 180, bottom: 100, width: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', zIndex: 50 },
   azItem: { flex: 1, width: 30, alignItems: 'center', justifyContent: 'center' },
-  azText: { fontSize: 9, fontWeight: 'bold', color: '#6B7280' },
-  fab: { position: 'absolute', bottom: 25, right: 25, backgroundColor: COLORS.fabBg, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6 },
+  azText: { fontSize: 10, fontWeight: 'bold', color: '#9CA3AF' },
+  
+  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: THEME.colors.primary, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: THEME.colors.primary, shadowOpacity: 0.4, shadowRadius: 8 },
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Platform, PermissionsAndroid, Alert, NativeModules, ActivityIndicator, AppState 
+  Platform, PermissionsAndroid, NativeModules, ActivityIndicator, AppState 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
@@ -9,12 +9,18 @@ import { useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../context/AlertContext';
+
 const { CallManagerModule } = NativeModules;
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
   const appState = useRef(AppState.currentState);
+
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   // 🟢 LISTENER: Detect when user returns from "Default Dialer" settings
   useEffect(() => {
@@ -48,21 +54,12 @@ export default function WelcomeScreen() {
           // They came back but DID NOT set it.
           setIsProcessing(false);
           
-          // 🛑 Skip Option (As you requested)
-          Alert.alert(
+          // 🟠 WARNING ALERT
+          showAlert(
             "Setup Incomplete", 
-            "QCall works best as your default phone app. Without it, we cannot identify spam calls.",
-            [
-              { 
-                text: "Try Again", 
-                onPress: () => handleAgreeAndContinue() 
-              },
-              { 
-                text: "Skip for Now", 
-                style: "cancel", 
-                onPress: async () => await completeOnboarding() // Let them in anyway
-              }
-            ]
+            "QCall works best as your default phone app. Please try setting it again.", 
+            "warning", 
+            () => handleAgreeAndContinue() // Action: Retry
           );
         }
       } else {
@@ -83,30 +80,52 @@ export default function WelcomeScreen() {
     setIsProcessing(true);
 
     try {
-      // 1. Android Permissions (Mandatory)
+      // 1. 🟢 Request ALL Native Android Permissions (Updated with SMS)
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.requestMultiple([
+        const permissions = [
           PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
+          PermissionsAndroid.PERMISSIONS.WRITE_CALL_LOG,
           PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-          PermissionsAndroid.PERMISSIONS.CALL_PHONE
-        ]);
+          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+          PermissionsAndroid.PERMISSIONS.ANSWER_PHONE_CALLS,
+          PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
+          PermissionsAndroid.PERMISSIONS.WRITE_CONTACTS,
+          // 🟢 ADDED MESSAGE PERMISSIONS
+          PermissionsAndroid.PERMISSIONS.READ_SMS,
+          PermissionsAndroid.PERMISSIONS.SEND_SMS,
+          PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
+        ];
+
+        // Android 13+ (API 33) requires explicit Notification permission
+        if (Platform.Version >= 33) {
+          permissions.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+        }
+
+        const granted = await PermissionsAndroid.requestMultiple(permissions);
         
-        if (granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] !== PermissionsAndroid.RESULTS.GRANTED) {
-           Alert.alert("Permission Required", "We need access to call logs to function.");
+        // Check critical permissions
+        const callLogGranted = granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] === PermissionsAndroid.RESULTS.GRANTED;
+        const phoneStateGranted = granted[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] === PermissionsAndroid.RESULTS.GRANTED;
+        const contactsGranted = granted[PermissionsAndroid.PERMISSIONS.READ_CONTACTS] === PermissionsAndroid.RESULTS.GRANTED;
+        const smsGranted = granted[PermissionsAndroid.PERMISSIONS.READ_SMS] === PermissionsAndroid.RESULTS.GRANTED;
+
+        if (!callLogGranted || !phoneStateGranted || !contactsGranted || !smsGranted) {
+           // 🔴 ERROR ALERT
+           showAlert("Permission Required", "We need access to Calls, Contacts, and Messages to function correctly.", "error");
            setIsProcessing(false);
            return;
         }
       }
 
-      // 2. Contacts Permission (Mandatory)
+      // 2. 🟢 Request Expo Contacts
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert("Permission Required", "We need contacts access to show caller names.");
+        showAlert("Permission Required", "We need contacts access to show caller names.", "error");
         setIsProcessing(false);
         return;
       }
 
-      // 3. Request Default Dialer (Optional / Skippable via Listener)
+      // 3. 🟢 Request Default Dialer
       if (Platform.OS === 'android' && CallManagerModule) {
         const isDefault = await CallManagerModule.checkIsDefaultDialer();
         if (!isDefault) {
@@ -122,6 +141,7 @@ export default function WelcomeScreen() {
     } catch (e) {
       console.error("Onboarding Error:", e);
       setIsProcessing(false);
+      showAlert("Error", "An unexpected error occurred during setup.", "error");
     }
   };
 
@@ -146,10 +166,10 @@ export default function WelcomeScreen() {
         <View style={styles.itemContainer}>
             <View style={styles.iconRow}>
                 <Ionicons name="call" size={24} color="#007AFF" />
-                <Text style={styles.itemTitle}>Calls</Text>
+                <Text style={styles.itemTitle}>Calls & Notifications</Text>
             </View>
             <Text style={styles.itemDesc}>
-                Calls permissions are needed to manage your calls and history.
+                Required to make calls, show incoming call screens, and manage call history.
             </Text>
         </View>
 
@@ -160,7 +180,18 @@ export default function WelcomeScreen() {
                 <Text style={styles.itemTitle}>Contacts</Text>
             </View>
             <Text style={styles.itemDesc}>
-                Contacts permissions are needed to show caller ID names.
+                Required to identify caller names and show their photos.
+            </Text>
+        </View>
+
+        {/* --- 🟢 MESSAGES (NEW) --- */}
+        <View style={styles.itemContainer}>
+            <View style={styles.iconRow}>
+                <MaterialIcons name="message" size={24} color="#007AFF" />
+                <Text style={styles.itemTitle}>Messages</Text>
+            </View>
+            <Text style={styles.itemDesc}>
+                Required to send quick responses when you can't answer a call.
             </Text>
         </View>
 

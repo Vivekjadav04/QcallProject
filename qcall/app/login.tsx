@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
-  Alert, Animated, ActivityIndicator, KeyboardAvoidingView, 
+  Animated, ActivityIndicator, KeyboardAvoidingView, 
   Platform, Keyboard, Easing, Dimensions 
+  // ❌ REMOVED: Alert
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,8 +12,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
-// 🟢 Import Redux Hook
+// Import Redux Hook
 import { useAuth } from '../hooks/useAuth'; 
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../context/AlertContext';
 
 const { width } = Dimensions.get('window');
 
@@ -34,9 +37,10 @@ const Particle = ({ size, initialX, initialY, duration, delay }: any) => {
 
 export default function LoginScreen() {
   const router = useRouter();
-  
-  // 🟢 Use Redux Hook
   const { checkUserExists } = useAuth(); 
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
@@ -64,7 +68,9 @@ export default function LoginScreen() {
 
     if (phoneNumber.length < 10) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Invalid Number", "Please enter a valid 10-digit mobile number.");
+      
+      // 🟢 UPDATED: Use High-Def Alert
+      showAlert("Invalid Number", "Please enter a valid 10-digit mobile number.", "warning");
       return;
     }
 
@@ -73,23 +79,17 @@ export default function LoginScreen() {
     try {
         console.log(`[Login] Checking if user ${phoneNumber} exists...`);
         
-        // 🟢 1. Check if user exists (Server Side)
         const exists = await checkUserExists(phoneNumber);
         
         setLoading(false);
 
         if (exists) {
-            // 🟢 A. User Exists -> Go to OTP Screen
-            // (The OTP Screen will handle the redirect to Welcome)
             console.log("[Login] User found. Routing to OTP.");
             router.push({
                 pathname: "/otp",
-                // Pass devMode status to allow skipping OTP if ON
                 params: { phoneNumber, bypass: devMode ? 'true' : 'false' } 
             });
         } else {
-            // 🟢 B. New User -> Go to Register Screen
-            // (The Register Screen will handle the redirect to Welcome)
             console.log("[Login] New user. Routing to Register.");
             router.push({
                 pathname: "/register",
@@ -99,7 +99,9 @@ export default function LoginScreen() {
     } catch (e) {
         setLoading(false);
         console.error("Login Check Error:", e);
-        Alert.alert("Connection Error", "Could not verify user status. Please check your internet.");
+        
+        // 🟢 UPDATED: Use High-Def Alert
+        showAlert("Connection Error", "Could not verify user status. Please check your internet.", "error");
     }
   };
 

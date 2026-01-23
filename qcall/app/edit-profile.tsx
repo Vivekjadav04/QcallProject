@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Alert
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform, ActivityIndicator
+  // ❌ REMOVED: Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +13,8 @@ import { API_BASE_URL } from '../constants/config';
 
 // Import Redux Hook
 import { useAuth } from '../hooks/useAuth'; 
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../context/AlertContext';
 
 const SUGGESTED_SKILLS = [
   "UI/UX Design", "React Native", "Marketing", "Project Management", 
@@ -70,11 +73,14 @@ const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
 export default function EditProfileScreen() {
   const router = useRouter();
   const { user, updateUser } = useAuth(); 
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // 🟢 UPDATED: Calculate progress based on separated names
+  // Calculate progress based on separated names
   const calculateProgress = () => {
     if (!user) return 0;
     const textFields = [
@@ -137,14 +143,21 @@ export default function EditProfileScreen() {
 
         if (res.data.success) {
             updateUser(res.data.data);
-            Alert.alert("Success", "Profile updated successfully!");
-            router.back();
+            
+            // 🟢 SUCCESS ALERT (Green)
+            showAlert("Success", "Profile updated successfully!", "success", () => {
+              // Optional: You can put router.back() here if you want it to close AFTER clicking "Okay"
+              router.back(); 
+            });
+            
         } else {
-            Alert.alert("Error", "Could not save profile.");
+            // 🔴 ERROR ALERT (Red)
+            showAlert("Error", "Could not save profile.", "error");
         }
     } catch (error) {
         console.error(error);
-        Alert.alert("Error", "Failed to connect to server.");
+        // 🔴 CONNECTION ALERT (Red)
+        showAlert("Connection Error", "Failed to connect to server.", "error");
     } finally {
         setIsSaving(false);
     }
@@ -183,11 +196,9 @@ export default function EditProfileScreen() {
 
           <Text style={styles.sectionHeader}>Personal Info</Text>
           <View style={styles.card}>
-            {/* 🟢 UPDATED: Removed single "Full Name" input */}
             
             <View style={styles.row}>
                 <View style={{flex: 1, marginRight: 10}}>
-                  {/* 🟢 UPDATED: Removed "Optional" tag */}
                   <InputGroup label="First Name" value={user.firstName} onChangeText={(t: string) => handleChange('firstName', t)} />
                 </View>
                 <View style={{flex: 1}}>

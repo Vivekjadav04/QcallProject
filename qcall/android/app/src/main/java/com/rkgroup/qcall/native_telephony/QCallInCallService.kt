@@ -1,7 +1,6 @@
 package com.rkgroup.qcall.native_telephony
 
 import android.annotation.SuppressLint
-import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -51,6 +50,13 @@ class QCallInCallService : InCallService() {
         fun setMuted(muted: Boolean) {
             instance?.setMuted(muted)
         }
+        
+        fun playDtmf(char: Char) {
+             currentCall?.playDtmfTone(char)
+             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                 currentCall?.stopDtmfTone()
+             }, 200)
+        }
     }
 
     override fun onCreate() {
@@ -73,26 +79,17 @@ class QCallInCallService : InCallService() {
         val handle = call.details.handle
         val number = handle?.schemeSpecificPart ?: ""
         lastCallerNumber = number
-
         lastCallerName = getContactName(this, number)
         callStartTime = 0 
 
         if (call.state == Call.STATE_RINGING) {
             startRinging()
-            
+            // 1. Show Incoming Notification (Heads up or Fullscreen handled by Helper)
             val notification = NotificationHelper.createIncomingCallNotification(this, lastCallerName, lastCallerNumber)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
-            
-            val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-            if (km.isKeyguardLocked) {
-                launchCallActivity(lastCallerName, lastCallerNumber, "Incoming")
-            }
-            
             updateReactAndUI(Call.STATE_RINGING)
         } else {
-            val notification = NotificationHelper.createOngoingCallNotification(this, lastCallerName, lastCallerNumber)
-            startForeground(NotificationHelper.NOTIFICATION_ID, notification)
-            
+            // 2. Outgoing Call - Go straight to Activity
             launchCallActivity(lastCallerName, lastCallerNumber, "Dialing")
             updateReactAndUI(Call.STATE_DIALING)
         }
@@ -122,6 +119,7 @@ class QCallInCallService : InCallService() {
                     
                     sendInternalBroadcast("ACTION_CALL_ACTIVE")
                     
+                    // Show "Ongoing" Notification (Silent, in tray)
                     val notification = NotificationHelper.createOngoingCallNotification(this@QCallInCallService, lastCallerName, lastCallerNumber)
                     val nm = getSystemService(NotificationManager::class.java)
                     nm.notify(NotificationHelper.NOTIFICATION_ID, notification)
@@ -149,11 +147,9 @@ class QCallInCallService : InCallService() {
     @SuppressLint("Range")
     private fun getContactName(context: Context, phoneNumber: String): String {
         if (phoneNumber.isEmpty()) return "Unknown"
-        
         var contactName = "Unknown"
         val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
         val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
-        
         try {
             val cursor: Cursor? = context.contentResolver.query(uri, projection, null, null, null)
             if (cursor != null) {
@@ -163,7 +159,6 @@ class QCallInCallService : InCallService() {
                 cursor.close()
             }
         } catch (e: Exception) { }
-        
         return if (contactName != "Unknown") contactName else "Unknown"
     }
 
@@ -205,7 +200,6 @@ class QCallInCallService : InCallService() {
         try {
             val params = Arguments.createMap()
             params.putString("status", status)
-            // 🟢 CALLING THE STATIC METHOD WE FIXED IN CALLMANAGERMODULE
             CallManagerModule.sendEvent("onCallStateChanged", params)
         } catch (e: Exception) { }
     }

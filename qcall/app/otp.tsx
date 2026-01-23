@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
-  Alert, Animated, ActivityIndicator, Keyboard, 
+  Animated, ActivityIndicator, Keyboard, 
   Platform, Easing, Dimensions 
+  // ❌ REMOVED: Alert
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -15,6 +16,9 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '../hooks/useAuth'; 
 import { sendOtpToUser } from '../services/Fast2SmsService';
 
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../context/AlertContext';
+
 const { width } = Dimensions.get('window');
 
 export default function OtpScreen() {
@@ -22,6 +26,9 @@ export default function OtpScreen() {
   
   // 🟢 Use Redux Login
   const { login } = useAuth(); 
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
   
   const { phoneNumber, bypass } = useLocalSearchParams();
   const mobileNumber = Array.isArray(phoneNumber) ? phoneNumber[0] : (phoneNumber || '');
@@ -61,9 +68,12 @@ export default function OtpScreen() {
     if (sent) {
         setGeneratedOtp(newOtp);
         setTimer(30);
-        Alert.alert("Code Sent", "We sent a code to your phone.");
+        
+        // 🟢 SUCCESS ALERT
+        showAlert("Code Sent", "We sent a verification code to your phone.", "success");
     } else {
-        Alert.alert("Error", "Could not send SMS.");
+        // 🔴 ERROR ALERT
+        showAlert("Error", "Could not send SMS. Please check your network.", "error");
     }
   };
 
@@ -93,6 +103,10 @@ export default function OtpScreen() {
     // 🟢 VERIFY OTP
     if (enteredOtp !== generatedOtp && !isBypass) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
+      // 🔴 OPTIONAL: ALERT FOR WRONG OTP (Or just shake)
+      showAlert("Wrong Code", "The code you entered is incorrect.", "error");
+
       Animated.sequence([
         Animated.timing(shakeAnim, { toValue: 15, duration: 50, useNativeDriver: true }),
         Animated.timing(shakeAnim, { toValue: -15, duration: 50, useNativeDriver: true }),
@@ -109,13 +123,14 @@ export default function OtpScreen() {
         
         if (success) {
             // 🟢 REDIRECT TO WELCOME SCREEN
-            // This ensures the user goes through the permissions flow
             router.replace("/welcome");
         } else {
-            Alert.alert("Login Failed", "Please try again.");
+            // 🔴 ERROR ALERT
+            showAlert("Login Failed", "We couldn't log you in. Please try again.", "error");
         }
     } catch (error) {
-      Alert.alert("Error", "Could not verify. Please try again.");
+      // 🔴 CONNECTION ALERT
+      showAlert("Connection Error", "Could not verify. Please check your internet.", "error");
     } finally {
       setLoading(false);
     }

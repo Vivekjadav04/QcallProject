@@ -32,7 +32,7 @@
 
         <activity
             android:name=".SplashActivity"
-            android:theme="@style/SplashTheme" 
+            android:theme="@style/SplashTheme"
             android:screenOrientation="portrait"
             android:exported="true">
             <intent-filter>
@@ -43,12 +43,12 @@
 
         <activity
             android:name=".CallActivity"
-            android:theme="@style/CallScreenTheme" 
-            android:launchMode="singleInstance"
+            android:theme="@style/CallScreenTheme"
+            android:launchMode="singleTop"
             android:excludeFromRecents="true"
-            android:taskAffinity=""
             android:screenOrientation="portrait"
-            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:exported="false" />
 
         <service
@@ -69,7 +69,7 @@
 
         <receiver
             android:name=".native_telephony.NotificationActionReceiver"
-            android:exported="true"> 
+            android:exported="false">
             <intent-filter>
                 <action android:name="ACTION_ANSWER"/>
                 <action android:name="ACTION_DECLINE"/>
@@ -82,11 +82,9 @@
             android:launchMode="singleTask"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/AppTheme" 
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
+            android:theme="@style/AppTheme"
             android:screenOrientation="portrait">
-            
+
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>

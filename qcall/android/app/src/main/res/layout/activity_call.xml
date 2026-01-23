@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone"
-        android:paddingTop="20dp">
+        android:paddingTop="40dp">
 
         <TextView
             android:id="@+id/ongoingTitle"
@@ -39,7 +39,7 @@
                 android:layout_height="wrap_content"
                 android:text="Call in Progress"
                 android:textColor="#E0E0E0"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/ongoingDuration"
@@ -47,18 +47,18 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="5dp"
                 android:text="00:00"
-                android:textColor="#69F0AE" 
-                android:textSize="18sp"
+                android:textColor="#69F0AE"
+                android:textSize="22sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/ongoingProfilePic"
-            android:layout_width="120dp"
-            android:layout_height="120dp"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
             android:layout_below="@id/ongoingInfoContainer"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="30dp"
+            android:layout_marginTop="40dp"
             android:src="@android:drawable/sym_def_app_icon"
             android:background="@drawable/bg_glass_panel"
             android:padding="20dp"
@@ -70,10 +70,10 @@
             android:layout_height="wrap_content"
             android:layout_below="@id/ongoingProfilePic"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
             android:text="Unknown Caller"
             android:textColor="@color/white"
-            android:textSize="24sp"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
         <TextView
@@ -85,13 +85,13 @@
             android:layout_marginTop="8dp"
             android:text="+1 000 000 000"
             android:textColor="#E0E0E0"
-            android:textSize="16sp" />
+            android:textSize="18sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_above="@+id/btnEndCall"
-            android:layout_marginBottom="40dp"
+            android:layout_marginBottom="50dp"
             android:gravity="center"
             android:orientation="horizontal">
 
@@ -116,7 +116,7 @@
                     android:text="Mute"
                     android:textColor="@color/white"
                     android:layout_marginTop="8dp"
-                    android:textSize="12sp" />
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -139,7 +139,7 @@
                     android:text="Keypad"
                     android:textColor="@color/white"
                     android:layout_marginTop="8dp"
-                    android:textSize="12sp" />
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -163,22 +163,46 @@
                     android:text="Speaker"
                     android:textColor="@color/white"
                     android:layout_marginTop="8dp"
-                    android:textSize="12sp" />
+                    android:textSize="14sp" />
             </LinearLayout>
         </LinearLayout>
 
         <ImageButton
             android:id="@+id/btnEndCall"
-            android:layout_width="70dp"
-            android:layout_height="70dp"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
             android:layout_alignParentBottom="true"
             android:layout_centerHorizontal="true"
-            android:layout_marginBottom="40dp"
+            android:layout_marginBottom="50dp"
             android:background="@drawable/circle_bg_red"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
             android:padding="20dp"
             android:scaleType="fitCenter"
             app:tint="@color/white" />
+
+        <GridLayout
+            android:id="@+id/keypadContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:background="#EF000000"
+            android:padding="20dp"
+            android:rowCount="4"
+            android:columnCount="3"
+            android:visibility="gone">
+            <Button android:id="@+id/key1" android:text="1" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key2" android:text="2" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key3" android:text="3" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key4" android:text="4" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key5" android:text="5" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key6" android:text="6" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key7" android:text="7" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key8" android:text="8" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key9" android:text="9" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/keyStar" android:text="*" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/key0" android:text="0" style="@style/KeypadButtonStyle"/>
+            <Button android:id="@+id/keyHash" android:text="#" style="@style/KeypadButtonStyle"/>
+        </GridLayout>
 
     </RelativeLayout>
 
@@ -186,7 +210,7 @@
         android:id="@+id/incomingRLView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingTop="20dp">
+        android:paddingTop="40dp">
 
         <TextView
             android:id="@+id/incomingTitle"
@@ -195,7 +219,7 @@
             android:layout_centerHorizontal="true"
             android:text="Incoming Call"
             android:textColor="#E0E0E0"
-            android:textSize="16sp" />
+            android:textSize="18sp" />
 
         <TextView
             android:id="@+id/incomingNumber"
@@ -206,7 +230,7 @@
             android:layout_marginTop="5dp"
             android:text="+1 000 000 000"
             android:textColor="@color/white"
-            android:textSize="22sp"
+            android:textSize="24sp"
             android:textStyle="bold" />
 
         <RelativeLayout
@@ -214,13 +238,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_below="@id/incomingNumber"
-            android:layout_marginTop="30dp"
+            android:layout_marginTop="50dp"
             android:gravity="center">
-
             <ImageView
                 android:id="@+id/incomingProfilePic"
-                android:layout_width="140dp"
-                android:layout_height="140dp"
+                android:layout_width="160dp"
+                android:layout_height="160dp"
                 android:src="@android:drawable/sym_def_app_icon"
                 android:background="@drawable/bg_glass_panel"
                 android:padding="30dp"
@@ -237,60 +260,77 @@
             android:textColor="@color/white"
             android:textSize="32sp"
             android:textStyle="bold"
-            android:layout_marginTop="10dp"/>
+            android:layout_marginTop="20dp"/>
 
         <TextView
             android:id="@+id/incomingLocation"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_below="@id/incomingCallerName"
-            android:layout_marginTop="5dp"
+            android:layout_marginTop="8dp"
             android:text="Mobile"
             android:gravity="center"
-            android:textColor="#E0E0E0" />
+            android:textColor="#E0E0E0"
+            android:textSize="16sp"/>
 
-        <FrameLayout
-            android:id="@+id/draggable_button_container"
-            android:layout_width="100dp"
-            android:layout_height="350dp"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            android:layout_centerHorizontal="true"
-            android:layout_marginBottom="20dp">
-
-            <ImageView
-                android:id="@+id/arrow_up"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="center_horizontal|bottom"
-                android:layout_marginBottom="100dp"
-                android:src="@drawable/arrow_up"
-                app:tint="#80FFFFFF" />
-
-            <ImageView
-                android:id="@+id/arrow_down"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="center_horizontal|top"
-                android:layout_marginTop="100dp"
-                android:src="@drawable/arrow_down"
-                app:tint="#80FFFFFF" />
+            android:layout_marginBottom="80dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:weightSum="2">
 
             <LinearLayout
-                android:id="@+id/draggable_button"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:background="@drawable/circle_bg_green"
-                android:padding="20dp">
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
 
-                <ImageView
-                    android:id="@+id/actionBtn"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@android:drawable/ic_menu_call"
+                <ImageButton
+                    android:id="@+id/btnIncomingDecline"
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:background="@drawable/circle_bg_red"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:padding="20dp"
+                    android:scaleType="fitCenter"
                     app:tint="@color/white" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Decline"
+                    android:textColor="#FFCDD2"
+                    android:layout_marginTop="12dp"
+                    android:textStyle="bold"/>
             </LinearLayout>
-        </FrameLayout>
 
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageButton
+                    android:id="@+id/btnIncomingAnswer"
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:background="@drawable/circle_bg_green"
+                    android:src="@android:drawable/ic_menu_call"
+                    android:padding="20dp"
+                    android:scaleType="fitCenter"
+                    app:tint="@color/white" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Answer"
+                    android:textColor="#C8E6C9"
+                    android:layout_marginTop="12dp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+        </LinearLayout>
     </RelativeLayout>
 </RelativeLayout>

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, SectionList, TouchableOpacity, Platform, 
   PermissionsAndroid, Image, TextInput, NativeModules, 
-  RefreshControl, Linking, Animated, Dimensions, Alert 
+  RefreshControl, Linking, Animated, Dimensions
+  // ❌ REMOVED: Alert
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; 
@@ -15,9 +16,12 @@ import * as Contacts from 'expo-contacts';
 import { useRouter, useFocusEffect } from 'expo-router';
 
 // 🟢 Services & Redux Hook
-import { useAuth } from '../../hooks/useAuth'; // Replaces useUser
+import { useAuth } from '../../hooks/useAuth'; 
 import { CallService } from '../../services/CallService'; 
 import DialerModal from '../../components/DialerModal'; 
+
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../../context/AlertContext';
 
 const { CallManagerModule } = NativeModules;
 const { width } = Dimensions.get('window');
@@ -67,7 +71,6 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
           <Text style={styles.headerTitle}>Recents</Text>
         </View>
         <TouchableOpacity style={styles.profileBtn} onPress={onProfilePress} activeOpacity={0.8}>
-           {/* 🟢 Display Profile Photo if available */}
            {userPhoto ? (
              <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
            ) : (
@@ -233,6 +236,9 @@ export default function CallLogScreen() {
   // 🟢 Use Redux to get user data
   const { user } = useAuth(); 
   
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
+  
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
   const [refreshing, setRefreshing] = useState(false);
   const [dialerVisible, setDialerVisible] = useState(false);
@@ -290,6 +296,7 @@ export default function CallLogScreen() {
       setMasterLogs(normalized);
     } catch (e) { 
       console.error("Log Error:", e); 
+      // 🟢 Optional: Silent fail or show toast, but avoiding full Alert for background sync fail
     }
   };
 
@@ -318,6 +325,9 @@ export default function CallLogScreen() {
          const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
          if (status === PermissionsAndroid.RESULTS.GRANTED) {
            loadData();
+         } else {
+            // 🔴 ERROR ALERT
+            showAlert("Permission Denied", "We cannot show your call history without permission.", "error");
          }
        } catch (e) { console.error(e); }
     }
@@ -341,19 +351,15 @@ export default function CallLogScreen() {
             }
             
             if (!isDefault) {
-                Alert.alert(
+                // 🟠 WARNING ALERT (Replaces Alert with Options)
+                showAlert(
                     "Permission Required",
-                    "To make calls directly from this app, QCall must be your default phone app.",
-                    [
-                        { text: "Cancel", style: "cancel" },
-                        { 
-                            text: "Set Default", 
-                            onPress: async () => {
-                                await CallManagerModule.requestDefaultDialer();
-                            }
-                        }
-                    ],
-                    { cancelable: true }
+                    "To make calls directly from this app, QCall must be your default phone app. Tap Retry to set it.",
+                    "warning",
+                    async () => {
+                        // Action on "Okay/Retry"
+                        await CallManagerModule.requestDefaultDialer();
+                    }
                 );
                 return; 
             }
@@ -361,7 +367,8 @@ export default function CallLogScreen() {
             CallManagerModule.startCall(cleanNumber);
             
         } catch (e) {
-            Alert.alert("Error", "Could not initiate call service.");
+            // 🔴 ERROR ALERT
+            showAlert("Error", "Could not initiate call service.", "error");
         }
     } else {
         Linking.openURL(`tel:${cleanNumber}`);
@@ -405,7 +412,6 @@ export default function CallLogScreen() {
         <HeaderComponent 
            searchText={searchText} 
            setSearchText={setSearchText} 
-           // 🟢 Pass the Profile Photo correctly
            userPhoto={user?.profilePhoto} 
            onProfilePress={() => router.push('/profile')} 
         />

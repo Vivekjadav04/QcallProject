@@ -9,8 +9,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-// 🔴 1. IMPORT USER CONTEXT
-import { useUser } from '../../context/UserContext';
+// 🟢 1. IMPORT USER CONTEXT
+import { useAuth } from '../../hooks/useAuth';
 
 // --- COLORS ---
 const COLORS = {
@@ -95,7 +95,7 @@ export default function AssistScreen() {
   const router = useRouter();
 
   // 🔴 3. GET USER DATA FROM CONTEXT
-  const { user } = useUser();
+  const { user } = useAuth();
   const userPhoto = user?.profilePhoto || null;
   
   // Animations

@@ -1,35 +1,24 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { 
-  View, 
-  Text, 
-  FlatList, 
-  StyleSheet, 
-  PermissionsAndroid, 
-  Platform, 
-  ActivityIndicator, 
-  TouchableOpacity, 
-  Modal, 
-  ScrollView,
-  Switch,
-  Vibration,
-  LayoutAnimation,
-  UIManager,
-  ToastAndroid,
-  Image,
-  TextInput
+  View, Text, FlatList, StyleSheet, PermissionsAndroid, Platform, 
+  ActivityIndicator, TouchableOpacity, Modal, ScrollView, Switch,
+  Vibration, LayoutAnimation, UIManager, ToastAndroid, Image, TextInput
+  // ❌ REMOVED: Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // @ts-ignore
 import SmsAndroid from 'react-native-get-sms-android';
-import { useRouter, useFocusEffect } from 'expo-router'; // 🟢 Added useFocusEffect
+import { useRouter, useFocusEffect } from 'expo-router'; 
 
-// 🔴 1. IMPORT USER CONTEXT
-import { useUser } from '../../context/UserContext';
+// 🟢 Services & Config
+import { useAuth } from '../../hooks/useAuth'; 
 
-// Enable Layout Animation for Android
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../../context/AlertContext';
+
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -43,53 +32,66 @@ interface SmsMessage {
 
 const PAGE_SIZE = 50; 
 
-// --- COLORS ---
-const COLORS = {
-  primary: '#0056D2',
-  background: '#fff',
-  searchBarBg: '#ECECEC',
-  textSub: '#757575',
+const THEME = {
+  colors: {
+    bg: '#F8FAFC',
+    card: '#FFFFFF',
+    primary: '#0F172A',
+    textMain: '#1E293B',
+    textSub: '#64748B',
+    danger: '#EF4444',
+    success: '#10B981',
+    border: '#E2E8F0',
+    searchBarBg: '#FFFFFF', // Updated to match other tabs
+  }
 };
 
-// --- HEADER COMPONENT ---
-const HeaderComponent = ({ searchText, setSearchText, router, userPhoto }: any) => (
-  <View style={styles.headerContainer}>
-    <View style={styles.searchBar}>
-      
-      <TouchableOpacity 
-        style={styles.profileIconLeft}
-        onPress={() => router.push('/(tabs)/profile')} 
-      >
-         {userPhoto ? (
-            <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
-         ) : (
-            <View style={[styles.avatarImage, { backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' }]}>
-               <Ionicons name="person" size={18} color="#FFF" />
-            </View>
-         )}
-      </TouchableOpacity>
-      
-      <TextInput 
-        placeholder="Search messages" 
-        placeholderTextColor="#777" 
-        style={styles.searchInput}
-        value={searchText}
-        onChangeText={setSearchText}
-      />
-      
-      <View style={styles.searchRightIcons}>
-         <TouchableOpacity style={styles.iconButton}>
-           <MaterialCommunityIcons name="qrcode-scan" size={22} color="#555" />
-         </TouchableOpacity>
+// --- HEADER COMPONENT (Standardized) ---
+const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  return (
+    <View style={styles.headerWrapper}>
+      <View style={styles.topRow}>
+        <View>
+          <Text style={styles.headerDate}>{dateStr}</Text>
+          <Text style={styles.headerTitle}>Messages</Text>
+        </View>
+        <TouchableOpacity style={styles.profileBtn} onPress={onProfilePress} activeOpacity={0.8}>
+           {userPhoto ? (
+             <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
+           ) : (
+             <View style={styles.avatarPlaceholder}>
+                <Feather name="user" size={20} color="#FFF" />
+             </View>
+           )}
+        </TouchableOpacity>
+      </View>
+      <View style={styles.searchBlock}>
+        <Feather name="search" size={18} color={THEME.colors.textSub} />
+        <TextInput 
+          placeholder="Search messages..." 
+          placeholderTextColor={THEME.colors.textSub} 
+          style={styles.searchInput}
+          value={searchText}
+          onChangeText={setSearchText} 
+        />
+        <TouchableOpacity style={styles.filterIcon}>
+            <MaterialCommunityIcons name="qrcode-scan" size={20} color={THEME.colors.primary} />
+        </TouchableOpacity>
       </View>
     </View>
-  </View>
-);
+  );
+});
 
 export default function MessageScreen() {
   const router = useRouter(); 
-  const { user } = useUser();
-  const userPhoto = user?.profilePhoto || null;
+  
+  // 🟢 Use Redux Hook
+  const { user } = useAuth();
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [loading, setLoading] = useState(true); 
@@ -104,8 +106,7 @@ export default function MessageScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<SmsMessage | null>(null);
 
-  // 🟢 TAB-SPECIFIC PERMISSION CHECK
-  // Triggers every time the tab comes into focus
+  // Tab-Specific Permission Check
   useFocusEffect(
     useCallback(() => {
       const checkAndLoad = async () => {
@@ -119,10 +120,14 @@ export default function MessageScreen() {
               fetchMessages(0);
             } else {
               setLoading(false);
+              // 🔴 ERROR ALERT
+              showAlert("Permission Denied", "We need SMS permission to display your messages.", "error");
             }
           }
         } else {
           setLoading(false);
+          // 🟠 IOS WARNING
+          showAlert("Not Supported", "SMS reading is not supported on iOS.", "warning");
         }
       };
 
@@ -230,11 +235,11 @@ export default function MessageScreen() {
         onPress={() => { setSelectedMessage(item); setModalVisible(true); }}
         activeOpacity={0.7}
       >
-        <View style={[styles.avatar, { backgroundColor: isNumber ? '#F0F0F0' : avatarColor }]}>
+        <View style={[styles.avatar, { backgroundColor: isNumber ? '#F1F5F9' : avatarColor }]}>
            {isBank ? (
-             <MaterialCommunityIcons name="bank" size={22} color="#555" />
+             <MaterialCommunityIcons name="bank" size={22} color="#64748B" />
            ) : isNumber ? (
-             <Ionicons name="person" size={22} color="#999" />
+             <Ionicons name="person" size={22} color="#94A3B8" />
            ) : (
              <Text style={styles.avatarText}>{senderLetter}</Text>
            )}
@@ -258,7 +263,7 @@ export default function MessageScreen() {
                  <MaterialCommunityIcons 
                    name={isPinned ? "pin" : "pin-outline"} 
                    size={18} 
-                   color={isPinned ? "#0056D2" : "#B0B0B0"} 
+                   color={isPinned ? THEME.colors.primary : "#B0B0B0"} 
                    style={isPinned ? {transform: [{rotate: '-45deg'}]} : {}}
                  />
              </TouchableOpacity>
@@ -272,7 +277,7 @@ export default function MessageScreen() {
   };
 
   const ListHeader = () => (
-    <View style={{ backgroundColor: '#fff' }}>
+    <View style={{ backgroundColor: THEME.colors.bg }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catContainer}>
          {['All', 'Private', 'Promotion', 'Spam'].map((cat) => (
              <TouchableOpacity 
@@ -288,14 +293,14 @@ export default function MessageScreen() {
       {pinnedList.length > 0 && (
           <View style={styles.sectionHeaderRow}>
              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <MaterialCommunityIcons name="pin" size={14} color="#0056D2" style={{transform: [{rotate: '-45deg'}]}} />
+                <MaterialCommunityIcons name="pin" size={14} color={THEME.colors.primary} style={{transform: [{rotate: '-45deg'}]}} />
                 <Text style={styles.sectionTitle}> Pinned</Text>
              </View>
              <Switch 
                value={showPinned} 
                onValueChange={setShowPinned}
                trackColor={{ false: "#E0E0E0", true: "#BBDEFB" }}
-               thumbColor={showPinned ? "#0056D2" : "#f4f3f4"}
+               thumbColor={showPinned ? THEME.colors.primary : "#f4f3f4"}
                style={{ transform: [{ scaleX: .8 }, { scaleY: .8 }] }}
              />
           </View>
@@ -311,17 +316,17 @@ export default function MessageScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" backgroundColor={COLORS.background} />
+      <StatusBar style="dark" backgroundColor={THEME.colors.bg} />
       
       <HeaderComponent 
         searchText={searchText} 
         setSearchText={setSearchText} 
-        router={router} 
-        userPhoto={userPhoto}
+        onProfilePress={() => router.push('/profile')} 
+        userPhoto={user?.profilePhoto}
       />
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0056D2" style={{marginTop: 50}} />
+        <ActivityIndicator size="large" color={THEME.colors.primary} style={{marginTop: 50}} />
       ) : (
         <FlatList
           data={regularList}
@@ -336,8 +341,8 @@ export default function MessageScreen() {
       )}
 
       <TouchableOpacity style={styles.fab}>
-         <MaterialCommunityIcons name="message-plus-outline" size={20} color="#fff" />
-         <Text style={styles.fabText}>New Chat</Text>
+          <MaterialCommunityIcons name="message-plus-outline" size={20} color="#fff" />
+          <Text style={styles.fabText}>New Chat</Text>
       </TouchableOpacity>
 
       <Modal
@@ -377,44 +382,56 @@ export default function MessageScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
-  headerContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.searchBarBg, borderRadius: 30, paddingHorizontal: 10, height: 50 },
-  profileIconLeft: { marginRight: 10 },
-  avatarImage: { width: 32, height: 32, borderRadius: 16 },
-  searchInput: { flex: 1, fontSize: 16, color: '#000' },
-  searchRightIcons: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  iconButton: { padding: 5 },
-  catContainer: { paddingHorizontal: 15, paddingVertical: 12 },
-  catPill: { backgroundColor: '#F5F7FA', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#EEF0F2' },
-  catPillActive: { backgroundColor: '#E8F0FE', borderColor: '#0056D2' },
-  catText: { fontSize: 13, fontWeight: '600', color: '#666' },
-  catTextActive: { color: '#0056D2' },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#0056D2', marginLeft: 6 },
-  divider: { height: 1, backgroundColor: '#F0F0F0', marginHorizontal: 15, marginVertical: 5 },
-  itemContainer: { flexDirection: 'row', paddingHorizontal: 15, paddingVertical: 14, alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F8F9FA' },
-  pinnedItemContainer: { backgroundColor: '#FAFDFF' },
-  avatar: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  safeArea: { flex: 1, backgroundColor: THEME.colors.bg },
+  
+  // Standardized Header
+  headerWrapper: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '600', textTransform: 'uppercase' },
+  headerTitle: { fontSize: 32, fontWeight: '800', color: THEME.colors.textMain, letterSpacing: -1 },
+  profileBtn: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  avatarImage: { width: 44, height: 44, borderRadius: 16, borderWidth: 2, borderColor: '#FFF' },
+  avatarPlaceholder: { width: 44, height: 44, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  
+  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 48, borderRadius: 16, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5 },
+  searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
+  filterIcon: { padding: 4 },
+
+  // Content Styles
+  catContainer: { paddingHorizontal: 20, paddingVertical: 12 },
+  catPill: { backgroundColor: '#F1F5F9', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  catPillActive: { backgroundColor: '#E0F2FE', borderColor: THEME.colors.primary },
+  catText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  catTextActive: { color: THEME.colors.primary },
+  
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: THEME.colors.primary, marginLeft: 6 },
+  divider: { height: 1, backgroundColor: '#E2E8F0', marginHorizontal: 20, marginVertical: 5 },
+  
+  itemContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14, alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F8F9FA' },
+  pinnedItemContainer: { backgroundColor: '#F8FAFC' },
+  avatar: { width: 46, height: 46, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   avatarText: { fontSize: 20, fontWeight: '700', color: '#444' },
   contentColumn: { flex: 1, justifyContent: 'center', marginRight: 8 },
-  senderName: { fontSize: 16, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 },
-  messagePreview: { fontSize: 13, color: '#666', lineHeight: 18 },
+  senderName: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain, marginBottom: 4 },
+  messagePreview: { fontSize: 13, color: THEME.colors.textSub, lineHeight: 18 },
   metaColumn: { alignItems: 'flex-end', justifyContent: 'space-between', height: 42 },
-  dateText: { fontSize: 11, color: '#999', fontWeight: '500', marginBottom: 4 },
+  dateText: { fontSize: 11, color: '#94A3B8', fontWeight: '500', marginBottom: 4 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pinTapArea: { padding: 4 },
-  simBadge: { backgroundColor: '#F0F0F0', width: 16, height: 16, borderRadius: 4, justifyContent: 'center', alignItems: 'center' },
-  simText: { color: '#888', fontSize: 10, fontWeight: 'bold' },
-  fab: { position: 'absolute', bottom: 20, right: 20, backgroundColor: '#0056D2', flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 30, elevation: 6, shadowColor: '#0056D2', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3 },
+  simBadge: { backgroundColor: '#F1F5F9', width: 16, height: 16, borderRadius: 4, justifyContent: 'center', alignItems: 'center' },
+  simText: { color: '#94A3B8', fontSize: 10, fontWeight: 'bold' },
+  
+  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: THEME.colors.primary, flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 30, elevation: 6, shadowColor: THEME.colors.primary, shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3 },
   fabText: { color: '#fff', fontWeight: 'bold', fontSize: 15, marginLeft: 8 },
+  
   modalContainer: { flex: 1, backgroundColor: '#fff' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderColor: '#eee' },
   modalTitle: { fontSize: 18, fontWeight: 'bold' },
   modalAvatarContainer: { alignItems: 'center', marginBottom: 20 },
   bigAvatar: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  bigAvatarText: { fontSize: 28, fontWeight: 'bold', color: '#0056D2' },
+  bigAvatarText: { fontSize: 28, fontWeight: 'bold', color: THEME.colors.primary },
   modalSender: { fontSize: 22, fontWeight: 'bold', color: '#000', marginBottom: 5 },
   modalDate: { fontSize: 14, color: '#666' },
-  messageBubble: { backgroundColor: '#F5F5F5', padding: 20, borderRadius: 16, marginTop: 10 },
+  messageBubble: { backgroundColor: '#F1F5F9', padding: 20, borderRadius: 16, marginTop: 10 },
 });

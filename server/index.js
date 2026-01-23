@@ -3,9 +3,10 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
-// Import Routes
+// 1. Import Routes (Moved all to the top)
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profileRoutes');
+const contactRoutes = require('./routes/contactRoutes'); 
 
 // Load environment variables
 dotenv.config();
@@ -14,11 +15,8 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// --- MIDDLEWARE (Fixed) ---
-app.use(cors()); // Allow React Native app to connect
-
-// 🔴 FIX: Only declare body parsers ONCE with the 50mb limit.
-// (Removing the duplicate default line fixes the 413 Error)
+// --- MIDDLEWARE ---
+app.use(cors()); 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -33,23 +31,24 @@ const connectDB = async () => {
   }
 };
 
-// Basic Test Route
+// 🟢 HEALTH CHECK ROUTE (The "Ping" Endpoint)
+// This is required for your App's "Health Gate" to pass
+app.get('/api', (req, res) => {
+  res.status(200).send("Qcall Server is Online 🟢");
+});
+
+// Basic Test Route (Root)
 app.get('/', (req, res) => {
   res.send('Qcall API is running...');
 });
 
-// Route Middlewares
+// Route Middlewares (Defined BEFORE app.listen)
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/contacts', contactRoutes);
 
 // Start the Server
 app.listen(PORT, () => {
   connectDB();
   console.log(`🚀 Server running on port ${PORT}`);
 });
-
-// Import route
-const contactRoutes = require('./routes/contactRoutes');
-
-// Use route
-app.use('/api/contacts', contactRoutes);

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, 
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, 
   Keyboard, Dimensions, Animated, Easing
+  // ❌ REMOVED: Alert
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +16,9 @@ import { StatusBar } from 'expo-status-bar';
 import { sendOtpToUser } from '../services/Fast2SmsService'; 
 import { API_BASE_URL } from '../constants/config';
 import { useAuth } from '../hooks/useAuth'; 
+
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../context/AlertContext';
 
 const { width } = Dimensions.get('window');
 const endpoint='/auth';
@@ -39,13 +43,16 @@ const Particle = ({ size, initialX, initialY, duration, delay }: any) => {
 export default function RegisterScreen() {
   const router = useRouter();
   const { login } = useAuth(); 
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   // 1. GET PARAMS
   const { phoneNumber, bypass } = useLocalSearchParams(); 
   const mobileNumber = Array.isArray(phoneNumber) ? phoneNumber[0] : (phoneNumber || '');
   const isBypass = bypass === 'true';
 
-  // 🟢 UPDATED: Separate State for First/Last Name
+  // State for Inputs
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -71,7 +78,7 @@ export default function RegisterScreen() {
   const performRegistrationAndLogin = async () => {
     try {
       setLoading(true);
-      // 🟢 UPDATED: Send firstName and lastName separately
+      
       const response = await axios.post(`${API_URL}/register`, {
         phoneNumber: mobileNumber, 
         firstName,
@@ -81,18 +88,25 @@ export default function RegisterScreen() {
 
       if (response.status === 201 || response.status === 200) {
         await login(mobileNumber);
-        Alert.alert("Success", "Account created!");
-        router.replace("/welcome"); 
+        
+        // 🟢 SUCCESS ALERT
+        showAlert("Success", "Account created successfully!", "success", () => {
+             router.replace("/welcome"); 
+        });
       }
     } catch (error: any) {
       if (error.response && error.response.status === 400) {
-          Alert.alert("Welcome Back", "Number registered. Logging you in...");
-          await login(mobileNumber);
-          router.replace("/welcome"); 
+          // 🟢 INFO ALERT (User exists)
+          showAlert("Welcome Back", "This number is already registered. Logging you in...", "success", async () => {
+              await login(mobileNumber);
+              router.replace("/welcome"); 
+          });
           return;
       }
       const errorMsg = error.response?.data?.msg || error.message;
-      Alert.alert("Registration Failed", typeof errorMsg === 'string' ? errorMsg : "Could not create account.");
+      
+      // 🔴 ERROR ALERT
+      showAlert("Registration Failed", typeof errorMsg === 'string' ? errorMsg : "Could not create account.", "error");
     } finally {
       setLoading(false);
     }
@@ -103,9 +117,10 @@ export default function RegisterScreen() {
     Keyboard.dismiss();
     if (loading) return;
 
-    // 🟢 UPDATED: Validation checks for First/Last Name
+    // Validation checks
     if (!firstName || !lastName || !email) {
-      Alert.alert("Missing Info", "Please fill in all fields (First Name, Last Name, Email).");
+      // 🟠 WARNING ALERT
+      showAlert("Missing Info", "Please fill in all fields (First Name, Last Name, Email).", "warning");
       return;
     }
 
@@ -122,12 +137,15 @@ export default function RegisterScreen() {
         if (smsSent) {
             setGeneratedOtp(newOtp);
             setOtpSent(true); 
-            Alert.alert("OTP Sent", `Code sent to ${mobileNumber}`);
+            // 🟢 SUCCESS ALERT
+            showAlert("Code Sent", `We sent a verification code to ${mobileNumber}`, "success");
         } else {
-            Alert.alert("Error", "Could not send OTP.");
+            // 🔴 ERROR ALERT
+            showAlert("Error", "Could not send verification code.", "error");
         }
     } catch (e) {
-        Alert.alert("Error", "Failed to send OTP");
+        // 🔴 CONNECTION ALERT
+        showAlert("Error", "Failed to connect to SMS service.", "error");
     } finally {
         setLoading(false);
     }
@@ -135,7 +153,8 @@ export default function RegisterScreen() {
 
   const handleVerifyOtp = async () => {
     if (otpInput !== generatedOtp) {
-      Alert.alert("Wrong OTP", "The code you entered is incorrect.");
+      // 🔴 ERROR ALERT
+      showAlert("Wrong Code", "The code you entered is incorrect.", "error");
       return;
     }
     await performRegistrationAndLogin();
@@ -175,7 +194,7 @@ export default function RegisterScreen() {
                   <Ionicons name="lock-closed" size={16} color="#64748B" style={{marginLeft: 'auto'}} />
                 </View>
 
-                {/* 🟢 UPDATED: Split First Name & Last Name Inputs */}
+                {/* Split First Name & Last Name Inputs */}
                 <View style={{flexDirection: 'row', gap: 12}}>
                     <View style={{flex: 1}}>
                         <Text style={styles.label}>First Name</Text>

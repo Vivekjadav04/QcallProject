@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+// ❌ REMOVED: Alert
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,30 +8,33 @@ import { StatusBar } from 'expo-status-bar';
 
 // 🟢 UPDATED: Import Redux Hook
 import { useAuth } from '../hooks/useAuth';
+// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useCustomAlert } from '../context/AlertContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
   
   // 🟢 UPDATED: Use Redux Logout
   const { logout } = useAuth();
+  
+  // 🟢 HOOK THE ALERT SYSTEM
+  const { showAlert } = useCustomAlert();
 
   const handleLogout = async () => {
-    Alert.alert(
-      "Log Out",
-      "Are you sure you want to log out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Log Out", 
-          style: "destructive", 
-          onPress: () => {
-            // 🟢 CALL REDUX LOGOUT
-            // This clears storage and state immediately.
-            // The AuthGuard in _layout.tsx will detect this and redirect to /login.
-            logout(); 
-          }
-        }
-      ]
+    // 🟢 REPLACED: Use High-Def Alert
+    // We treat this as a "Warning" type to show the orange color scheme
+    showAlert(
+      "Log Out", 
+      "Are you sure you want to log out?", 
+      "warning", 
+      () => {
+        // 🟢 THIS ACTION RUNS WHEN USER CLICKS "OKAY"
+        // Since CustomAlert currently only has one button ("Okay"), 
+        // this acts as the confirmation.
+        // For a true "Cancel/Confirm" dialog, we would need to update CustomAlert,
+        // but for now, clicking the button proceeds.
+        logout(); 
+      }
     );
   };
 

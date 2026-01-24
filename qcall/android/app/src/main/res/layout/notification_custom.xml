@@ -2,7 +2,9 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#0F172A"
+    
+    android:background="@drawable/bg_notification_rounded"
+    
     android:padding="12dp">
 
     <ImageView

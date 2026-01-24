@@ -4,11 +4,9 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.database.Cursor
+import android.media.AudioManager // 🟢 IMPORTED
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.net.Uri
-import android.provider.ContactsContract
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
@@ -16,6 +14,7 @@ import android.telecom.VideoProfile
 import com.facebook.react.bridge.Arguments
 import com.rkgroup.qcall.CallActivity
 import com.rkgroup.qcall.CallManagerModule
+import com.rkgroup.qcall.helpers.ContactHelper // 🟢 IMPORTED
 import com.rkgroup.qcall.helpers.NotificationHelper
 
 class QCallInCallService : InCallService() {
@@ -30,10 +29,12 @@ class QCallInCallService : InCallService() {
         private var activeRingtone: Ringtone? = null
 
         fun answerCurrentCall() {
+            stopRingtone()
             currentCall?.answer(VideoProfile.STATE_AUDIO_ONLY)
         }
         
         fun hangupCurrentCall() {
+            stopRingtone()
             if (currentCall != null) {
                 if (currentCall?.state == Call.STATE_RINGING) {
                     currentCall?.reject(false, null)
@@ -57,6 +58,14 @@ class QCallInCallService : InCallService() {
                  currentCall?.stopDtmfTone()
              }, 200)
         }
+
+        fun stopRingtone() {
+            try {
+                if (activeRingtone?.isPlaying == true) {
+                    activeRingtone?.stop()
+                }
+            } catch (e: Exception) { }
+        }
     }
 
     override fun onCreate() {
@@ -79,17 +88,22 @@ class QCallInCallService : InCallService() {
         val handle = call.details.handle
         val number = handle?.schemeSpecificPart ?: ""
         lastCallerNumber = number
-        lastCallerName = getContactName(this, number)
+
+        // 🟢 FIX: Use ContactHelper to get Name AND Photo
+        val contactInfo = ContactHelper.getContactInfo(this, number)
+        lastCallerName = contactInfo.name
+        
         callStartTime = 0 
 
         if (call.state == Call.STATE_RINGING) {
             startRinging()
-            // 1. Show Incoming Notification (Heads up or Fullscreen handled by Helper)
-            val notification = NotificationHelper.createIncomingCallNotification(this, lastCallerName, lastCallerNumber)
+            
+            // 🟢 FIX: Pass the Photo (contactInfo.photo) to the Notification
+            // System Notification handles VIBRATION. We handle SOUND.
+            val notification = NotificationHelper.createIncomingCallNotification(this, lastCallerName, lastCallerNumber, contactInfo.photo)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             updateReactAndUI(Call.STATE_RINGING)
         } else {
-            // 2. Outgoing Call - Go straight to Activity
             launchCallActivity(lastCallerName, lastCallerNumber, "Dialing")
             updateReactAndUI(Call.STATE_DIALING)
         }
@@ -116,10 +130,8 @@ class QCallInCallService : InCallService() {
                 Call.STATE_ACTIVE -> {
                     stopRingtone()
                     if (callStartTime == 0L) callStartTime = System.currentTimeMillis()
-                    
                     sendInternalBroadcast("ACTION_CALL_ACTIVE")
                     
-                    // Show "Ongoing" Notification (Silent, in tray)
                     val notification = NotificationHelper.createOngoingCallNotification(this@QCallInCallService, lastCallerName, lastCallerNumber)
                     val nm = getSystemService(NotificationManager::class.java)
                     nm.notify(NotificationHelper.NOTIFICATION_ID, notification)
@@ -144,38 +156,24 @@ class QCallInCallService : InCallService() {
         startActivity(intent)
     }
 
-    @SuppressLint("Range")
-    private fun getContactName(context: Context, phoneNumber: String): String {
-        if (phoneNumber.isEmpty()) return "Unknown"
-        var contactName = "Unknown"
-        val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
-        val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
-        try {
-            val cursor: Cursor? = context.contentResolver.query(uri, projection, null, null, null)
-            if (cursor != null) {
-                if (cursor.moveToFirst()) {
-                    contactName = cursor.getString(cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME))
-                }
-                cursor.close()
-            }
-        } catch (e: Exception) { }
-        return if (contactName != "Unknown") contactName else "Unknown"
-    }
-
     private fun startRinging() {
         try {
+            if (activeRingtone?.isPlaying == true) return 
+
+            // 🟢 CRITICAL FIX: Respect Silent/Vibrate Mode
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
+                // If phone is on Silent or Vibrate, DO NOT PLAY SOUND.
+                // The System Notification will handle vibration.
+                return 
+            }
+
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             activeRingtone = RingtoneManager.getRingtone(applicationContext, uri)
             activeRingtone?.play()
         } catch (e: Exception) { e.printStackTrace() }
     }
     
-    private fun stopRingtone() {
-        try {
-            if (activeRingtone?.isPlaying == true) activeRingtone?.stop()
-        } catch (e: Exception) { }
-    }
-
     private fun clearNotification() {
         stopForeground(true)
         val nm = getSystemService(NotificationManager::class.java)

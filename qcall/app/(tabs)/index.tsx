@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, SectionList, TouchableOpacity, Platform, 
   PermissionsAndroid, Image, TextInput, NativeModules, 
   RefreshControl, Linking, Animated, Dimensions
-  // ❌ REMOVED: Alert
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; 
@@ -15,12 +14,10 @@ import CallLogs from 'react-native-call-log';
 import * as Contacts from 'expo-contacts'; 
 import { useRouter, useFocusEffect } from 'expo-router';
 
-// 🟢 Services & Redux Hook
+// 🟢 Services & Hooks
 import { useAuth } from '../../hooks/useAuth'; 
 import { CallService } from '../../services/CallService'; 
 import DialerModal from '../../components/DialerModal'; 
-
-// 🟢 IMPORT CUSTOM ALERT HOOK
 import { useCustomAlert } from '../../context/AlertContext';
 
 const { CallManagerModule } = NativeModules;
@@ -233,20 +230,14 @@ export default function CallLogScreen() {
   const router = useRouter(); 
   const insets = useSafeAreaInsets();
   
-  // 🟢 Use Redux to get user data
   const { user } = useAuth(); 
-  
-  // 🟢 HOOK THE ALERT SYSTEM
   const { showAlert } = useCustomAlert();
   
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
   const [refreshing, setRefreshing] = useState(false);
   const [dialerVisible, setDialerVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [activeTab, setActiveTab] = useState<'Home' | 'Favorites'>('Home');
   const [permissionGranted, setPermissionGranted] = useState(false);
-
-  const tabAnim = useRef(new Animated.Value(0)).current;
 
   // --- DATA LOADING ---
   const loadData = async () => {
@@ -296,7 +287,6 @@ export default function CallLogScreen() {
       setMasterLogs(normalized);
     } catch (e) { 
       console.error("Log Error:", e); 
-      // 🟢 Optional: Silent fail or show toast, but avoiding full Alert for background sync fail
     }
   };
 
@@ -326,16 +316,10 @@ export default function CallLogScreen() {
          if (status === PermissionsAndroid.RESULTS.GRANTED) {
            loadData();
          } else {
-            // 🔴 ERROR ALERT
-            showAlert("Permission Denied", "We cannot show your call history without permission.", "error");
+           showAlert("Permission Denied", "We cannot show your call history without permission.", "error");
          }
        } catch (e) { console.error(e); }
     }
-  };
-
-  const switchTab = (tab: 'Home' | 'Favorites') => {
-    setActiveTab(tab);
-    Animated.spring(tabAnim, { toValue: tab === 'Home' ? 0 : 1, useNativeDriver: false }).start();
   };
 
   const handleNativeCall = useCallback(async (name: string | null, number: string) => {
@@ -351,13 +335,11 @@ export default function CallLogScreen() {
             }
             
             if (!isDefault) {
-                // 🟠 WARNING ALERT (Replaces Alert with Options)
                 showAlert(
                     "Permission Required",
                     "To make calls directly from this app, QCall must be your default phone app. Tap Retry to set it.",
                     "warning",
                     async () => {
-                        // Action on "Okay/Retry"
                         await CallManagerModule.requestDefaultDialer();
                     }
                 );
@@ -367,7 +349,6 @@ export default function CallLogScreen() {
             CallManagerModule.startCall(cleanNumber);
             
         } catch (e) {
-            // 🔴 ERROR ALERT
             showAlert("Error", "Could not initiate call service.", "error");
         }
     } else {
@@ -377,7 +358,6 @@ export default function CallLogScreen() {
 
   const sections = useMemo(() => {
     if (!masterLogs.length) return [];
-    if (activeTab === 'Favorites') return []; 
 
     let result = masterLogs;
     if (searchText) result = result.filter(log => log.number.includes(searchText) || (log.name && log.name.toLowerCase().includes(searchText.toLowerCase())));
@@ -402,7 +382,7 @@ export default function CallLogScreen() {
     ];
     
     return finalSections.filter(s => s.data && s.data.length > 0);
-  }, [masterLogs, searchText, activeTab]);
+  }, [masterLogs, searchText]);
 
   return (
     <View style={styles.container}>
@@ -419,19 +399,7 @@ export default function CallLogScreen() {
         <AdCard />
         <DebugButtons />
 
-        <View style={styles.tabWrapper}>
-          <View style={styles.tabContainer}>
-            <Animated.View style={[styles.tabActive, { 
-              transform: [{ translateX: tabAnim.interpolate({ inputRange: [0, 1], outputRange: [2, (width - 48)/2] }) }] 
-            }]} />
-            <TouchableOpacity style={styles.tabItem} onPress={() => switchTab('Home')}>
-              <Text style={[styles.tabText, activeTab === 'Home' && styles.tabTextActive]}>Recents</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.tabItem} onPress={() => switchTab('Favorites')}>
-              <Text style={[styles.tabText, activeTab === 'Favorites' && styles.tabTextActive]}>Favorites</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* ❌ REMOVED: Tab Switcher (Recents/Favorites) */}
 
         {!permissionGranted && (
             <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>
@@ -503,13 +471,6 @@ const styles = StyleSheet.create({
   debugRow: { flexDirection: 'row', gap: 10 },
   debugBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   debugText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 13 },
-
-  tabWrapper: { paddingHorizontal: 20, marginBottom: 10 },
-  tabContainer: { flexDirection: 'row', height: 48, backgroundColor: THEME.colors.tabBg, borderRadius: 16, padding: 4, position: 'relative' },
-  tabActive: { position: 'absolute', top: 4, bottom: 4, width: '50%', backgroundColor: '#FFF', borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4 },
-  tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
-  tabText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
-  tabTextActive: { color: THEME.colors.textMain, fontWeight: '700' },
 
   sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },

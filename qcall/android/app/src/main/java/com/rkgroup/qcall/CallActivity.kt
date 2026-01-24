@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -28,7 +29,6 @@ import androidx.core.view.WindowInsetsCompat
 import com.rkgroup.qcall.helpers.ContactHelper
 import com.rkgroup.qcall.native_telephony.QCallInCallService
 import java.util.concurrent.TimeUnit
-import android.content.res.ColorStateList
 
 class CallActivity : Activity() {
 
@@ -126,8 +126,11 @@ class CallActivity : Activity() {
         val name = intent.getStringExtra("contact_name") ?: "Unknown"
         val number = intent.getStringExtra("contact_number") ?: ""
         val status = intent.getStringExtra("call_status") ?: "Incoming"
+        
+        // 🟢 FIX: Check for Auto Answer flag from Notification
+        val shouldAutoAnswer = intent.getBooleanExtra("auto_answer", false)
 
-        Log.d(TAG, "Processing Intent: Name=$name, Number=$number, Status=$status")
+        Log.d(TAG, "Processing Intent: Name=$name, Number=$number, Status=$status, AutoAnswer=$shouldAutoAnswer")
 
         // Update Text Views
         findViewById<TextView>(R.id.incomingCallerName).text = name
@@ -137,6 +140,14 @@ class CallActivity : Activity() {
 
         // Load Photo
         loadContactInfo(number)
+
+        // 🟢 HANDLE AUTO ANSWER (Fixes Crash)
+        if (shouldAutoAnswer) {
+            QCallInCallService.answerCurrentCall()
+            switchToOngoingUI(true)
+            dismissKeyguard()
+            return // Stop here, don't run the switch below
+        }
 
         // Switch UI based on state
         when (status) {
@@ -256,8 +267,8 @@ class CallActivity : Activity() {
                 interpolator = AccelerateDecelerateInterpolator()
             }
         }
-        if (!giggleAnswer!!.isRunning) giggleAnswer?.start()
-        if (!giggleDecline!!.isRunning) giggleDecline?.start()
+        if (giggleAnswer?.isRunning == false) giggleAnswer?.start()
+        if (giggleDecline?.isRunning == false) giggleDecline?.start()
     }
 
     private fun stopGiggleAnimation() {

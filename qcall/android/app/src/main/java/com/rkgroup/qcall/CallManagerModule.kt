@@ -87,7 +87,6 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    // 🟢 FIXED: Explicitly use reactApplicationContext.currentActivity
     @ReactMethod
     fun requestDefaultDialer(promise: Promise) {
         val activity = reactApplicationContext.currentActivity
@@ -149,7 +148,10 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         try {
             val context = reactApplicationContext
             NotificationHelper.createNotificationChannel(context)
-            val notification = NotificationHelper.createIncomingCallNotification(context, name, number)
+            
+            // 🟢 FIX: Passed 'null' as the 4th argument (photo)
+            val notification = NotificationHelper.createIncomingCallNotification(context, name, number, null)
+            
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.notify(NotificationHelper.NOTIFICATION_ID, notification)
         } catch (e: Exception) {

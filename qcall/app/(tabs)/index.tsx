@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, SectionList, TouchableOpacity, Platform, 
   PermissionsAndroid, Image, TextInput, NativeModules, 
-  RefreshControl, Linking, Animated, Dimensions
+  RefreshControl, Linking, Animated, Dimensions, Alert
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; 
@@ -113,27 +113,51 @@ const AdCard = () => (
   </View>
 );
 
+// --- 🟢 UPDATED DEBUG BUTTONS ---
 const DebugButtons = () => {
+  
+  // 1. Existing Tests
   const testIncomingLocked = () => {
     CallManagerModule.launchTestIncomingUI("Elon Musk", "+1 (555) 019-9999");
   };
   const testIncomingUnlocked = () => {
     CallManagerModule.showTestNotification("Jeff Bezos", "+1 (555) 020-8888");
   };
-  const testActiveCall = () => {
-    CallManagerModule.launchTestOutgoingUI("Bill Gates", "+1 (555) 030-7777");
+  
+  // 2. 🟢 NEW OVERLAY TEST (With Delay)
+  const testOverlay = () => {
+    Alert.alert(
+        "Overlay Test",
+        "Overlay will appear in 3 seconds. Minimize the app now to see it over your wallpaper.",
+        [
+            { 
+                text: "Start", 
+                onPress: () => {
+                    setTimeout(() => {
+                        if (CallManagerModule?.launchTestIncomingUI) {
+                            CallManagerModule.launchTestIncomingUI("Test Caller", "9924162127");
+                        } else {
+                            console.warn("CallManagerModule not linked");
+                        }
+                    }, 3000); // 3 Second Delay
+                }
+            }
+        ]
+    );
   };
 
   return (
     <View style={styles.debugContainer}>
       <Text style={styles.debugLabel}>🚧 NATIVE UI TESTS</Text>
       <View style={styles.debugRow}>
+        
+        {/* OLD BUTTONS */}
         <TouchableOpacity 
           style={[styles.debugBtn, { backgroundColor: THEME.colors.success }]}
           onPress={testIncomingLocked}
         >
           <Feather name="lock" size={16} color="#FFF" />
-          <Text style={styles.debugText}>Locked (Swipe)</Text>
+          <Text style={styles.debugText}>Locked</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -144,13 +168,15 @@ const DebugButtons = () => {
           <Text style={styles.debugText}>Notify</Text>
         </TouchableOpacity>
 
+        {/* 🟢 NEW OVERLAY BUTTON */}
         <TouchableOpacity 
-          style={[styles.debugBtn, { backgroundColor: THEME.colors.primary }]}
-          onPress={testActiveCall}
+          style={[styles.debugBtn, { backgroundColor: '#EF4444' }]} // Red Color
+          onPress={testOverlay}
         >
-          <Feather name="phone-call" size={16} color="#FFF" />
-          <Text style={styles.debugText}>Active</Text>
+          <Feather name="layers" size={16} color="#FFF" />
+          <Text style={styles.debugText}>Overlay</Text>
         </TouchableOpacity>
+
       </View>
     </View>
   );
@@ -397,9 +423,9 @@ export default function CallLogScreen() {
         />
         
         <AdCard />
+        
+        {/* 🟢 UPDATED DEBUG BUTTONS */}
         <DebugButtons />
-
-        {/* ❌ REMOVED: Tab Switcher (Recents/Favorites) */}
 
         {!permissionGranted && (
             <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>

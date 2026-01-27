@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings // 🟢 ADDED THIS IMPORT
 import android.telecom.TelecomManager
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
@@ -14,6 +15,7 @@ import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.rkgroup.qcall.native_telephony.QCallInCallService
 import com.rkgroup.qcall.helpers.NotificationHelper 
+import com.rkgroup.qcall.new_overlay.CallerIdActivity 
 
 class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -75,6 +77,30 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         QCallInCallService.toggleSpeaker(on)
     }
 
+    // 🟢 NEW: Check Overlay Permission
+    @ReactMethod
+    fun checkOverlayPermission(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                promise.resolve(Settings.canDrawOverlays(reactApplicationContext))
+            } else {
+                promise.resolve(true) // Not needed below Android 6
+            }
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    // 🟢 NEW: Open Overlay Settings Page
+    @ReactMethod
+    fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + reactApplicationContext.packageName))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            reactApplicationContext.startActivity(intent)
+        }
+    }
+
     @ReactMethod
     fun checkIsDefaultDialer(promise: Promise) {
         val context = reactApplicationContext
@@ -116,11 +142,10 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun launchTestIncomingUI(name: String, number: String) {
         try {
-            val intent = Intent(reactApplicationContext, CallActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                putExtra("contact_name", name)
-                putExtra("contact_number", number)
-                putExtra("call_status", "Incoming")
+            val intent = Intent(reactApplicationContext, CallerIdActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("number", number) 
+                putExtra("name", name)
             }
             reactApplicationContext.startActivity(intent)
         } catch (e: Exception) {
@@ -131,7 +156,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun launchTestOutgoingUI(name: String, number: String) {
         try {
-            val intent = Intent(reactApplicationContext, CallActivity::class.java).apply {
+            val intent = Intent(reactApplicationContext, com.rkgroup.qcall.CallActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                 putExtra("contact_name", name)
                 putExtra("contact_number", number)
@@ -149,7 +174,6 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
             val context = reactApplicationContext
             NotificationHelper.createNotificationChannel(context)
             
-            // 🟢 FIX: Passed 'null' as the 4th argument (photo)
             val notification = NotificationHelper.createIncomingCallNotification(context, name, number, null)
             
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

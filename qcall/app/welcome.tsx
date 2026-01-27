@@ -19,20 +19,19 @@ export default function WelcomeScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const appState = useRef(AppState.currentState);
 
-  // 🟢 HOOK THE ALERT SYSTEM
   const { showAlert } = useCustomAlert();
 
-  // 🟢 LISTENER: Detect when user returns from "Default Dialer" settings
+  // 🟢 INTELLIGENT LISTENER: Detects when user returns from Settings
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      // If app comes from background -> active, and we were processing permissions...
       if (
         appState.current.match(/inactive|background/) && 
         nextAppState === 'active' && 
         isProcessing
       ) {
-        console.log("App active, checking dialer status...");
-        checkDialerAndProceed();
+        console.log("App active, checking permissions...");
+        // ⚡ Give a small delay for OS to update state
+        setTimeout(() => checkPermissionsSequence(), 500);
       }
       appState.current = nextAppState;
     });
@@ -42,30 +41,42 @@ export default function WelcomeScreen() {
     };
   }, [isProcessing]);
 
-  // 🟢 LOGIC: Checks if user actually set the default dialer
-  const checkDialerAndProceed = async () => {
+  // 🟢 MAIN SEQUENCE: The "Waterfall" of permissions
+  const checkPermissionsSequence = async () => {
     try {
-      if (Platform.OS === 'android' && CallManagerModule) {
-        const isDefault = await CallManagerModule.checkIsDefaultDialer();
-        if (isDefault) {
-          // Success! They set it.
-          await completeOnboarding();
-        } else {
-          // They came back but DID NOT set it.
-          setIsProcessing(false);
-          
-          // 🟠 WARNING ALERT
-          showAlert(
-            "Setup Incomplete", 
-            "QCall works best as your default phone app. Please try setting it again.", 
-            "warning", 
-            () => handleAgreeAndContinue() // Action: Retry
-          );
-        }
-      } else {
+      if (Platform.OS !== 'android') {
         await completeOnboarding();
+        return;
       }
+
+      // STEP 1: CHECK OVERLAY PERMISSION
+      const hasOverlay = await CallManagerModule.checkOverlayPermission();
+      if (!hasOverlay) {
+         showAlert(
+            "Display Permission Needed", 
+            "To show the Caller ID popup, QCall needs permission to 'Display over other apps'. Tap OK to open Settings.", 
+            "warning", 
+            () => {
+               // Open Settings
+               CallManagerModule.requestOverlayPermission();
+            }
+         );
+         return; // Stop here, wait for user to come back (useEffect will trigger this function again)
+      }
+
+      // STEP 2: CHECK DEFAULT DIALER
+      const isDefault = await CallManagerModule.checkIsDefaultDialer();
+      if (!isDefault) {
+          // Request Dialer
+          await CallManagerModule.requestDefaultDialer();
+          return; // Wait for system dialog result or AppState return
+      }
+
+      // STEP 3: ALL GOOD -> FINISH
+      await completeOnboarding();
+
     } catch (e) {
+      console.error("Permission Sequence Error:", e);
       setIsProcessing(false);
     }
   };
@@ -80,7 +91,7 @@ export default function WelcomeScreen() {
     setIsProcessing(true);
 
     try {
-      // 1. 🟢 Request ALL Native Android Permissions (Updated with SMS)
+      // 🟢 PHASE 1: Standard Permissions (Popup style)
       if (Platform.OS === 'android') {
         const permissions = [
           PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
@@ -90,58 +101,44 @@ export default function WelcomeScreen() {
           PermissionsAndroid.PERMISSIONS.ANSWER_PHONE_CALLS,
           PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
           PermissionsAndroid.PERMISSIONS.WRITE_CONTACTS,
-          // 🟢 ADDED MESSAGE PERMISSIONS
           PermissionsAndroid.PERMISSIONS.READ_SMS,
           PermissionsAndroid.PERMISSIONS.SEND_SMS,
           PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
         ];
 
-        // Android 13+ (API 33) requires explicit Notification permission
+        // Android 13+ Notification Permission
         if (Platform.Version >= 33) {
           permissions.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
         }
 
         const granted = await PermissionsAndroid.requestMultiple(permissions);
         
-        // Check critical permissions
-        const callLogGranted = granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] === PermissionsAndroid.RESULTS.GRANTED;
-        const phoneStateGranted = granted[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] === PermissionsAndroid.RESULTS.GRANTED;
-        const contactsGranted = granted[PermissionsAndroid.PERMISSIONS.READ_CONTACTS] === PermissionsAndroid.RESULTS.GRANTED;
-        const smsGranted = granted[PermissionsAndroid.PERMISSIONS.READ_SMS] === PermissionsAndroid.RESULTS.GRANTED;
+        // Basic check if critical ones are denied
+        const criticalDenied = 
+             granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] !== PermissionsAndroid.RESULTS.GRANTED ||
+             granted[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] !== PermissionsAndroid.RESULTS.GRANTED;
 
-        if (!callLogGranted || !phoneStateGranted || !contactsGranted || !smsGranted) {
-           // 🔴 ERROR ALERT
-           showAlert("Permission Required", "We need access to Calls, Contacts, and Messages to function correctly.", "error");
+        if (criticalDenied) {
+           showAlert("Permission Required", "We need basic access to Calls and Contacts to function.", "error");
            setIsProcessing(false);
            return;
         }
       }
 
-      // 2. 🟢 Request Expo Contacts
+      // 🟢 PHASE 2: Expo Contacts
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== 'granted') {
-        showAlert("Permission Required", "We need contacts access to show caller names.", "error");
         setIsProcessing(false);
         return;
       }
 
-      // 3. 🟢 Request Default Dialer
-      if (Platform.OS === 'android' && CallManagerModule) {
-        const isDefault = await CallManagerModule.checkIsDefaultDialer();
-        if (!isDefault) {
-           // Opens system dialog. The useEffect listener above waits for the return.
-           await CallManagerModule.requestDefaultDialer();
-           return; // Wait for listener
-        }
-      }
-
-      // If already default, finish immediately
-      await completeOnboarding();
+      // 🟢 PHASE 3: Trigger the Advanced Check (Overlay + Dialer)
+      checkPermissionsSequence();
 
     } catch (e) {
       console.error("Onboarding Error:", e);
       setIsProcessing(false);
-      showAlert("Error", "An unexpected error occurred during setup.", "error");
+      showAlert("Error", "An unexpected error occurred.", "error");
     }
   };
 
@@ -149,61 +146,53 @@ export default function WelcomeScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        <Text style={styles.headerTitle}>Permissions and privacy</Text>
+        <Text style={styles.headerTitle}>Permissions & Privacy</Text>
         <Text style={styles.subHeader}>
-          Please review the key points in our Privacy policy and Terms of service below.
+          To provide Caller ID and Spam protection, QCall needs the following permissions.
         </Text>
 
         <View style={styles.divider} />
 
-        {/* --- PERMISSIONS HEADER --- */}
+        {/* --- PERMISSIONS LIST --- */}
         <View style={styles.sectionHeaderRow}>
             <Feather name="check-circle" size={20} color="#007AFF" /> 
-            <Text style={styles.sectionHeaderTitle}>Permissions</Text>
+            <Text style={styles.sectionHeaderTitle}>Required Permissions</Text>
         </View>
 
-        {/* --- CALLS --- */}
+        {/* 1. Calls */}
         <View style={styles.itemContainer}>
             <View style={styles.iconRow}>
                 <Ionicons name="call" size={24} color="#007AFF" />
-                <Text style={styles.itemTitle}>Calls & Notifications</Text>
+                <Text style={styles.itemTitle}>Calls & Log</Text>
             </View>
-            <Text style={styles.itemDesc}>
-                Required to make calls, show incoming call screens, and manage call history.
-            </Text>
+            <Text style={styles.itemDesc}>To identify incoming numbers and manage your history.</Text>
         </View>
 
-        {/* --- CONTACTS --- */}
+        {/* 2. Overlay (NEW) */}
+        <View style={styles.itemContainer}>
+            <View style={styles.iconRow}>
+                <MaterialIcons name="layers" size={24} color="#007AFF" />
+                <Text style={styles.itemTitle}>Display Over Apps</Text>
+            </View>
+            <Text style={styles.itemDesc}>Required to show the Caller ID popup when your phone rings.</Text>
+        </View>
+
+        {/* 3. Contacts */}
         <View style={styles.itemContainer}>
             <View style={styles.iconRow}>
                 <MaterialIcons name="contacts" size={24} color="#007AFF" />
                 <Text style={styles.itemTitle}>Contacts</Text>
             </View>
-            <Text style={styles.itemDesc}>
-                Required to identify caller names and show their photos.
-            </Text>
+            <Text style={styles.itemDesc}>To match incoming calls with your saved friends.</Text>
         </View>
 
-        {/* --- 🟢 MESSAGES (NEW) --- */}
+        {/* 4. Messages */}
         <View style={styles.itemContainer}>
             <View style={styles.iconRow}>
                 <MaterialIcons name="message" size={24} color="#007AFF" />
                 <Text style={styles.itemTitle}>Messages</Text>
             </View>
-            <Text style={styles.itemDesc}>
-                Required to send quick responses when you can't answer a call.
-            </Text>
-        </View>
-
-        {/* --- DATA --- */}
-        <View style={styles.itemContainer}>
-            <View style={styles.iconRow}>
-                <MaterialIcons name="security" size={24} color="#007AFF" />
-                <Text style={styles.itemTitle}>Data we process</Text>
-            </View>
-            <Text style={styles.itemDesc}>
-                We are committed to privacy. We only process data required for phone number, call logs, and spam detection.
-            </Text>
+            <Text style={styles.itemDesc}>To handle spam SMS and quick replies.</Text>
         </View>
 
       </ScrollView>
@@ -213,8 +202,8 @@ export default function WelcomeScreen() {
         <View style={styles.lockRow}>
             <Feather name="lock" size={12} color="#64748B" />
             <Text style={styles.footerText}>
-                By clicking agree & continue you agree to our {'\n'}
-                <Text style={styles.linkText}>Privacy policy</Text> and <Text style={styles.linkText}>Terms of service</Text>
+                Your data stays private. By continuing you agree to our {'\n'}
+                <Text style={styles.linkText}>Privacy Policy</Text> and <Text style={styles.linkText}>Terms of Service</Text>
             </Text>
         </View>
 

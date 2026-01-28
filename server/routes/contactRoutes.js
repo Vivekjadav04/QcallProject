@@ -1,17 +1,19 @@
 const express = require('express');
 const router = express.Router();
+
 const contactController = require('../controllers/contactController');
+const authMiddleware = require('../middleware/authMiddleware');
 
-// @route   POST /api/contacts/sync
-// @desc    Syncs private contacts AND updates global directory
-router.post('/sync', contactController.syncContacts);
+// 🟢 POST /api/contacts/sync
+router.post('/sync', authMiddleware, contactController.syncContacts);
 
-// @route   GET /api/contacts/search/:number
-// @desc    Search for a number (Caller ID)
-router.get('/search/:number', contactController.getCallerInfo);
+// 🟢 GET /api/contacts/identify
+router.get('/identify', contactController.identifyCaller);
 
-// @route   POST /api/contacts/not-spam
-// @desc    Mark a number as safe
-router.post('/not-spam', contactController.reportNotSpam);
+// 🟢 POST /api/contacts/report
+router.post('/report', authMiddleware, contactController.reportSpam);
+
+// 🟢 POST /api/contacts/not-spam
+router.post('/not-spam', authMiddleware, contactController.reportNotSpam);
 
 module.exports = router;

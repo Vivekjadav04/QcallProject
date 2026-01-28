@@ -15,8 +15,10 @@ import * as Contacts from 'expo-contacts';
 import { useRouter, useFocusEffect } from 'expo-router';
 
 // 🟢 Services & Hooks
-import { useAuth } from '../../hooks/useAuth'; 
+import { useAuth } from '../../hooks/useAuth'; // Check path (hooks vs services)
 import { CallService } from '../../services/CallService'; 
+import { SyncService } from '../../services/SyncService'; // 🟢 IMPORTED SYNC
+import { apiService } from '../../services/api';         // 🟢 IMPORTED API
 import DialerModal from '../../components/DialerModal'; 
 import { useCustomAlert } from '../../context/AlertContext';
 
@@ -38,6 +40,10 @@ const THEME = {
     tabBg: '#E2E8F0'
   }
 };
+
+// ... (Keep Helpers, HeaderComponent, AdCard, DebugButtons, CallLogItem exactly as they were) ...
+// To save space, I am focusing on the Main Component where the logic change is needed.
+// Paste your previous UI components here.
 
 // --- HELPERS ---
 const normalizeNumber = (num: string) => num ? num.replace(/[^\d+]/g, '') : '';
@@ -113,18 +119,14 @@ const AdCard = () => (
   </View>
 );
 
-// --- 🟢 UPDATED DEBUG BUTTONS ---
+// --- DEBUG BUTTONS ---
 const DebugButtons = () => {
-  
-  // 1. Existing Tests
   const testIncomingLocked = () => {
     CallManagerModule.launchTestIncomingUI("Elon Musk", "+1 (555) 019-9999");
   };
   const testIncomingUnlocked = () => {
     CallManagerModule.showTestNotification("Jeff Bezos", "+1 (555) 020-8888");
   };
-  
-  // 2. 🟢 NEW OVERLAY TEST (With Delay)
   const testOverlay = () => {
     Alert.alert(
         "Overlay Test",
@@ -139,7 +141,7 @@ const DebugButtons = () => {
                         } else {
                             console.warn("CallManagerModule not linked");
                         }
-                    }, 3000); // 3 Second Delay
+                    }, 3000); 
                 }
             }
         ]
@@ -150,33 +152,18 @@ const DebugButtons = () => {
     <View style={styles.debugContainer}>
       <Text style={styles.debugLabel}>🚧 NATIVE UI TESTS</Text>
       <View style={styles.debugRow}>
-        
-        {/* OLD BUTTONS */}
-        <TouchableOpacity 
-          style={[styles.debugBtn, { backgroundColor: THEME.colors.success }]}
-          onPress={testIncomingLocked}
-        >
+        <TouchableOpacity style={[styles.debugBtn, { backgroundColor: THEME.colors.success }]} onPress={testIncomingLocked}>
           <Feather name="lock" size={16} color="#FFF" />
           <Text style={styles.debugText}>Locked</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.debugBtn, { backgroundColor: '#8B5CF6' }]} 
-          onPress={testIncomingUnlocked}
-        >
+        <TouchableOpacity style={[styles.debugBtn, { backgroundColor: '#8B5CF6' }]} onPress={testIncomingUnlocked}>
           <Feather name="bell" size={16} color="#FFF" />
           <Text style={styles.debugText}>Notify</Text>
         </TouchableOpacity>
-
-        {/* 🟢 NEW OVERLAY BUTTON */}
-        <TouchableOpacity 
-          style={[styles.debugBtn, { backgroundColor: '#EF4444' }]} // Red Color
-          onPress={testOverlay}
-        >
+        <TouchableOpacity style={[styles.debugBtn, { backgroundColor: '#EF4444' }]} onPress={testOverlay}>
           <Feather name="layers" size={16} color="#FFF" />
           <Text style={styles.debugText}>Overlay</Text>
         </TouchableOpacity>
-
       </View>
     </View>
   );
@@ -184,14 +171,10 @@ const DebugButtons = () => {
 
 const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
   const isMissed = item.type === 'missed';
-  
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, { 
-        toValue: 1, 
-        duration: 300, 
-        delay: index < 10 ? index * 40 : 0, 
-        useNativeDriver: true 
+        toValue: 1, duration: 300, delay: index < 10 ? index * 40 : 0, useNativeDriver: true 
     }).start();
   }, []);
 
@@ -202,15 +185,8 @@ const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
   };
 
   return (
-    <Animated.View style={{ 
-        opacity: anim, 
-        transform: [{ translateY: anim.interpolate({inputRange:[0,1], outputRange:[20,0]}) }] 
-    }}>
-      <TouchableOpacity 
-        style={styles.cardItem} 
-        activeOpacity={0.7} 
-        onPress={() => onCallPress(item.name, item.number)}
-      >
+    <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({inputRange:[0,1], outputRange:[20,0]}) }] }}>
+      <TouchableOpacity style={styles.cardItem} activeOpacity={0.7} onPress={() => onCallPress(item.name, item.number)}>
         <View style={[styles.squircleAvatar, isMissed && styles.missedAvatarBg]}>
           {!item.imageUri ? (
             <Text style={[styles.avatarText, isMissed && { color: THEME.colors.danger }]}>
@@ -220,19 +196,15 @@ const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
             <Image source={{ uri: item.imageUri }} style={styles.realAvatar} />
           )}
         </View>
-
         <View style={styles.cardContent}>
           <View style={styles.cardTopRow}>
              <Text style={[styles.cardName, isMissed && { color: THEME.colors.danger }]} numberOfLines={1}>
                {item.name || item.number}
              </Text>
              {item.count > 1 && (
-                <View style={styles.counterBadge}>
-                    <Text style={styles.counterText}>({item.count})</Text>
-                </View>
+                <View style={styles.counterBadge}><Text style={styles.counterText}>({item.count})</Text></View>
              )}
           </View>
-          
           <View style={styles.cardBottomRow}>
              <View style={styles.iconRow}>
                 {getIcon()}
@@ -242,7 +214,6 @@ const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
              <Text style={styles.cardTime}>{item.time}</Text>
           </View>
         </View>
-
         <TouchableOpacity style={styles.callBtn} onPress={() => onCallPress(item.name, item.number)}>
            <Ionicons name="call" size={18} color="#FFF" />
         </TouchableOpacity>
@@ -256,7 +227,7 @@ export default function CallLogScreen() {
   const router = useRouter(); 
   const insets = useSafeAreaInsets();
   
-  const { user } = useAuth(); 
+  const { user } = useAuth(); // Assuming this context exists
   const { showAlert } = useCustomAlert();
   
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
@@ -264,6 +235,22 @@ export default function CallLogScreen() {
   const [dialerVisible, setDialerVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [permissionGranted, setPermissionGranted] = useState(false);
+
+  // 🟢 1. BACKGROUND SYNC TRIGGER (The Fix)
+  useEffect(() => {
+    const initSync = async () => {
+      // Check if user is logged in before syncing
+      const isAuthenticated = await apiService.isAuthenticated();
+      
+      if (isAuthenticated) {
+        console.log("🚀 Home Screen: Starting Background Contact Sync...");
+        // Start sync (It handles permissions internally)
+        SyncService.startSync();
+      }
+    };
+
+    initSync();
+  }, []);
 
   // --- DATA LOADING ---
   const loadData = async () => {
@@ -319,7 +306,9 @@ export default function CallLogScreen() {
   useFocusEffect(
     useCallback(() => {
       const init = async () => {
+        // Preload contacts for display
         CallService.preloadContacts();
+        
         if (Platform.OS === 'android') {
           const hasLogPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
           if (hasLogPerm) {
@@ -424,7 +413,6 @@ export default function CallLogScreen() {
         
         <AdCard />
         
-        {/* 🟢 UPDATED DEBUG BUTTONS */}
         <DebugButtons />
 
         {!permissionGranted && (

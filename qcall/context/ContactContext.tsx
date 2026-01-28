@@ -1,20 +1,11 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
-import { PermissionsAndroid, Platform, InteractionManager } from 'react-native';
+import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import * as Contacts from 'expo-contacts';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../constants/config';
-
-// ⚠️ CONFIRM YOUR IP
-
-const endpoint='/contacts';
-
-const API_URL = `${API_BASE_URL}${endpoint}`; 
+import { SyncService } from '../services/SyncService'; // Import the new service
 
 interface ContactContextType {
   contacts: any[];
   isSyncing: boolean;
-  syncContacts: () => Promise<void>;
+  triggerSync: (force?: boolean) => Promise<void>;
 }
 
 const ContactContext = createContext<ContactContextType | undefined>(undefined);
@@ -23,74 +14,42 @@ export const ContactProvider = ({ children }: { children: ReactNode }) => {
   const [contacts, setContacts] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const syncContacts = async () => {
-    if (isSyncing) return;
-
-    InteractionManager.runAfterInteractions(async () => {
-      try {
-        setIsSyncing(true);
-
-        if (Platform.OS === 'android') {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.READ_CONTACTS
-          );
-          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-            setIsSyncing(false);
-            return;
-          }
-        }
-
-        const { data } = await Contacts.getContactsAsync({
-          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image, Contacts.Fields.Name],
-        });
-
-        if (data.length > 0) {
-          setContacts(data); 
-
-          // 🟢 TS FIX: Added safety checks (?.) and fallback (|| "")
-          const formattedContacts = data
-            .filter(c => c.phoneNumbers && c.phoneNumbers.length > 0)
-            .map(c => {
-               // Safely get the number string, defaulting to empty if missing
-               const rawNumber = c.phoneNumbers?.[0]?.number || "";
-               
-               return {
-                 name: c.name || "Unknown",
-                 number: rawNumber.replace(/\D/g, '').slice(-10)
-               };
-            })
-            // Extra safety: remove any entries that somehow ended up without a number
-            .filter(c => c.number.length > 0);
-
-          const token = await AsyncStorage.getItem('token');
-          const CHUNK_SIZE = 500; 
-
-          console.log(`🚀 Starting Background Sync: ${formattedContacts.length} contacts`);
-
-          for (let i = 0; i < formattedContacts.length; i += CHUNK_SIZE) {
-            const chunk = formattedContacts.slice(i, i + CHUNK_SIZE);
-            console.log(`📤 Sending chunk ${i / CHUNK_SIZE + 1}...`);
-            
-            await axios.post(`${API_URL}/sync`, { contacts: chunk }, {
-              headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` 
-              }
-            });
-          }
-          console.log("✅ All chunks synced successfully!");
-        }
-
-      } catch (error) {
-        console.error("❌ Background Sync Paused:", error);
-      } finally {
-        setIsSyncing(false);
+  // 1. Load Local Contacts for Display (UI Only)
+  const loadLocalContacts = async () => {
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status === 'granted') {
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image, Contacts.Fields.Name],
+      });
+      if (data.length > 0) {
+        setContacts(data);
       }
-    });
+    }
   };
 
+  // 2. Trigger the Background Sync (Data Upload)
+  const triggerSync = async (force = false) => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    
+    // Call the robust service we created
+    await SyncService.startSync(force);
+    
+    // Refresh local UI list
+    await loadLocalContacts();
+    
+    setIsSyncing(false);
+  };
+
+  // Initial Load on App Start
+  useEffect(() => {
+    loadLocalContacts();
+    // Try to sync (will stick to cooldown rules)
+    SyncService.startSync(false); 
+  }, []);
+
   return (
-    <ContactContext.Provider value={{ contacts, isSyncing, syncContacts }}>
+    <ContactContext.Provider value={{ contacts, isSyncing, triggerSync }}>
       {children}
     </ContactContext.Provider>
   );

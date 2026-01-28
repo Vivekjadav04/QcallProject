@@ -1,19 +1,16 @@
+// File: app/edit-profile.tsx
 import React, { useState } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform, ActivityIndicator
-  // ❌ REMOVED: Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Circle } from 'react-native-svg';
-import axios from 'axios'; 
-import { API_BASE_URL } from '../constants/config';
 
-// Import Redux Hook
+// 🟢 IMPORTS
 import { useAuth } from '../hooks/useAuth'; 
-// 🟢 IMPORT CUSTOM ALERT HOOK
 import { useCustomAlert } from '../context/AlertContext';
 
 const SUGGESTED_SKILLS = [
@@ -21,6 +18,7 @@ const SUGGESTED_SKILLS = [
   "Sales", "Python", "Photography", "Leadership", "Public Speaking", "Data Analysis"
 ];
 
+// Helper Components
 const InputGroup = ({ label, value, onChangeText, keyboardType='default', multiline=false }: any) => (
   <View style={styles.inputGroup}>
     <Text style={styles.label}>{label}</Text>
@@ -57,10 +55,7 @@ const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
             origin="60, 60"
           />
         </Svg>
-        <Image 
-          source={{ uri: imageUri || 'https://i.pravatar.cc/150?img=12' }} 
-          style={styles.avatar} 
-        />
+        <Image source={{ uri: imageUri || 'https://i.pravatar.cc/150?img=12' }} style={styles.avatar} />
         <TouchableOpacity style={styles.cameraBtn} onPress={onEdit}>
           <Ionicons name="camera" size={18} color="#FFF" />
         </TouchableOpacity>
@@ -72,37 +67,31 @@ const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user, updateUser } = useAuth(); 
   
-  // 🟢 HOOK THE ALERT SYSTEM
+  // 🟢 USE THE NEW HOOK (Includes saveProfile)
+  const { user, updateUser, saveProfile } = useAuth(); 
   const { showAlert } = useCustomAlert();
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Calculate progress based on separated names
   const calculateProgress = () => {
     if (!user) return 0;
     const textFields = [
       user.firstName, user.lastName, user.email, user.phoneNumber,
-      user.secondPhoneNumber,
-      user.birthday, user.gender, user.aboutMe, user.profilePhoto,
+      user.secondPhoneNumber, user.birthday, user.gender, user.aboutMe, user.profilePhoto,
       user.address?.street, user.address?.city, user.address?.zipCode, user.address?.country,
       user.company?.title, user.company?.website
     ];
     let filledCount = textFields.filter(f => f && f.toString().trim().length > 0).length;
     if (user.tags && user.tags.length > 0) filledCount += 1;
-    const totalFields = textFields.length + 1; 
-    return (filledCount / totalFields) * 100;
+    return (filledCount / (textFields.length + 1)) * 100;
   };
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
+      allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: true,
     });
     if (!result.canceled && result.assets[0].base64) {
       const base64Img = `data:image/jpeg;base64,${result.assets[0].base64}`;
@@ -110,10 +99,8 @@ export default function EditProfileScreen() {
     }
   };
 
-  const handleChange = (key: string, value: string) => {
-    updateUser({ [key]: value });
-  };
-
+  const handleChange = (key: string, value: string) => updateUser({ [key]: value });
+  
   const handleNestedChange = (parent: string, key: string, value: string) => {
     const currentObj = (user as any)[parent] || {};
     updateUser({ [parent]: { ...currentObj, [key]: value } });
@@ -122,8 +109,7 @@ export default function EditProfileScreen() {
   const addTag = (tagToAdd: string) => {
     const cleanTag = tagToAdd.trim();
     if (cleanTag && !user?.tags?.includes(cleanTag)) {
-      const newTags = [...(user?.tags || []), cleanTag];
-      updateUser({ tags: newTags });
+      updateUser({ tags: [...(user?.tags || []), cleanTag] });
     }
     setTagInput(''); 
   };
@@ -133,39 +119,28 @@ export default function EditProfileScreen() {
     updateUser({ tags: newTags });
   };
 
+  // 🟢 UPDATED SAVE FUNCTION
   const handleManualSave = async () => {
     if (!user) return;
     setIsSaving(true);
 
     try {
-        const payload = { ...user };
-        const res = await axios.put(`${API_BASE_URL}/profile/update`, payload);
-
-        if (res.data.success) {
-            updateUser(res.data.data);
+        // Use the hook to save to DB
+        await saveProfile(user);
+        
+        showAlert("Success", "Profile updated successfully!", "success", () => {
+            router.back(); 
+        });
             
-            // 🟢 SUCCESS ALERT (Green)
-            showAlert("Success", "Profile updated successfully!", "success", () => {
-              // Optional: You can put router.back() here if you want it to close AFTER clicking "Okay"
-              router.back(); 
-            });
-            
-        } else {
-            // 🔴 ERROR ALERT (Red)
-            showAlert("Error", "Could not save profile.", "error");
-        }
     } catch (error) {
         console.error(error);
-        // 🔴 CONNECTION ALERT (Red)
-        showAlert("Connection Error", "Failed to connect to server.", "error");
+        showAlert("Error", "Could not save profile.", "error");
     } finally {
         setIsSaving(false);
     }
   };
 
-  if (!user) return (
-    <View style={styles.center}><ActivityIndicator size="large" color="#0056D2" /></View>
-  );
+  if (!user) return (<View style={styles.center}><ActivityIndicator size="large" color="#0056D2" /></View>);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -181,22 +156,13 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{flex:1}}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <ScrollView 
-          contentContainerStyle={styles.content} 
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex:1}} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
           <ProfileProgress percentage={calculateProgress()} imageUri={user.profilePhoto} onEdit={pickImage} />
 
           <Text style={styles.sectionHeader}>Personal Info</Text>
           <View style={styles.card}>
-            
             <View style={styles.row}>
                 <View style={{flex: 1, marginRight: 10}}>
                   <InputGroup label="First Name" value={user.firstName} onChangeText={(t: string) => handleChange('firstName', t)} />

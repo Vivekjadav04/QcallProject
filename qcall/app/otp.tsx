@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
-  Animated, ActivityIndicator, Keyboard, 
-  Platform, Easing, Dimensions 
-  // ❌ REMOVED: Alert
+  Animated, ActivityIndicator, Dimensions 
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -12,11 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics'; 
 
-// 🟢 Import Redux Hook & Service
+// 🟢 Import Hook & Service
 import { useAuth } from '../hooks/useAuth'; 
 import { sendOtpToUser } from '../services/Fast2SmsService';
-
-// 🟢 IMPORT CUSTOM ALERT HOOK
 import { useCustomAlert } from '../context/AlertContext';
 
 const { width } = Dimensions.get('window');
@@ -24,10 +20,9 @@ const { width } = Dimensions.get('window');
 export default function OtpScreen() {
   const router = useRouter();
   
-  // 🟢 Use Redux Login
-  const { login } = useAuth(); 
+  // 🟢 CHANGE: Use verifyOtp instead of login
+  const { verifyOtp } = useAuth(); 
   
-  // 🟢 HOOK THE ALERT SYSTEM
   const { showAlert } = useCustomAlert();
   
   const { phoneNumber, bypass } = useLocalSearchParams();
@@ -51,7 +46,7 @@ export default function OtpScreen() {
     if (isBypass) {
         console.log("Dev Mode: Skipping SMS.");
         setGeneratedOtp("1234");
-        setOtp(['1','2','3','4']); // Auto-fill
+        setOtp(['1','2','3','4']); 
     } else {
         sendOtp();
     }
@@ -63,16 +58,14 @@ export default function OtpScreen() {
   }, []);
 
   const sendOtp = async () => {
+    // Generate a random 4-digit code locally
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     const sent = await sendOtpToUser(mobileNumber, newOtp);
     if (sent) {
         setGeneratedOtp(newOtp);
         setTimer(30);
-        
-        // 🟢 SUCCESS ALERT
         showAlert("Code Sent", "We sent a verification code to your phone.", "success");
     } else {
-        // 🔴 ERROR ALERT
         showAlert("Error", "Could not send SMS. Please check your network.", "error");
     }
   };
@@ -100,40 +93,40 @@ export default function OtpScreen() {
 
     if (enteredOtp.length !== 4) return;
 
-    // 🟢 VERIFY OTP
+    // 1. Client-Side Check (Matches what was sent via SMS)
     if (enteredOtp !== generatedOtp && !isBypass) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      
-      // 🔴 OPTIONAL: ALERT FOR WRONG OTP (Or just shake)
+      triggerShake();
       showAlert("Wrong Code", "The code you entered is incorrect.", "error");
-
-      Animated.sequence([
-        Animated.timing(shakeAnim, { toValue: 15, duration: 50, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -15, duration: 50, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 15, duration: 50, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
-      ]).start();
       return;
     }
 
     setLoading(true);
     try {
-        // 🟢 LOGIN & REDIRECT
-        const success = await login(mobileNumber);
+        // 🟢 2. Server-Side Authentication
+        // We pass the OTP so the server knows we verified it.
+        // NOTE: Since we verify locally, your backend should be set to accept this,
+        // or you can pass "1234" if your backend is in Dev Mode.
+        await verifyOtp(mobileNumber, enteredOtp);
         
-        if (success) {
-            // 🟢 REDIRECT TO WELCOME SCREEN
-            router.replace("/welcome");
-        } else {
-            // 🔴 ERROR ALERT
-            showAlert("Login Failed", "We couldn't log you in. Please try again.", "error");
-        }
+        // If verifyOtp doesn't throw, we are logged in!
+        router.replace("/(tabs)");
+        
     } catch (error) {
-      // 🔴 CONNECTION ALERT
-      showAlert("Connection Error", "Could not verify. Please check your internet.", "error");
+      console.error(error);
+      showAlert("Login Failed", "Server rejected the code.", "error");
     } finally {
       setLoading(false);
     }
+  };
+
+  const triggerShake = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 15, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -15, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 15, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
   };
 
   return (

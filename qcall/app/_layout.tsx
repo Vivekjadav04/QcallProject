@@ -8,16 +8,17 @@ import { THEME } from '../constants/theme';
 import axios from 'axios'; 
 import { API_BASE_URL } from '../constants/config'; 
 
-// 🟢 1. REDUX & CONTEXT IMPORTS
-import { Provider } from 'react-redux';
-import { store } from '../store';
-import { useAuth } from '../hooks/useAuth';
+// 🟢 1. CONTEXT IMPORTS (Redux Removed)
+import { AuthProvider, useAuth } from '../hooks/useAuth'; // New Context Hook
+import { AlertProvider } from '../context/AlertContext'; 
 import CustomAlert from '../components/CustomAlert'; 
-import { AlertProvider } from '../context/AlertContext'; // 🟢 IMPORTED PROVIDER
 
 // 🟢 2. INNER COMPONENT (The Logic)
 function AppContent() {
-  const { isAuthenticated, loading: authLoading } = useAuth(); 
+  // 🟢 Updated Hook Usage: We check if 'user' exists to know if authenticated
+  const { user, loading: authLoading } = useAuth(); 
+  const isAuthenticated = !!user; // Derived state
+
   const router = useRouter();
   const segments = useSegments();
   const [isMounted, setIsMounted] = useState(false);
@@ -40,6 +41,7 @@ function AppContent() {
 
     try {
       console.log(`[Health Gate] Pinging: ${API_BASE_URL}`);
+      // Simple Ping to see if backend is alive
       await axios.get(API_BASE_URL, { timeout: 4000 });
       
       console.log("[Health Gate] Server is Online 🟢");
@@ -55,17 +57,21 @@ function AppContent() {
 
   // 3. Auth Guard Logic
   useEffect(() => {
+    // Wait until everything is ready
     if (authLoading || !isMounted || !isServerReady) return;
 
     const inAuthGroup = segments[0] === 'login' || segments[0] === 'register' || segments[0] === 'otp';
 
     if (!isAuthenticated && !inAuthGroup) {
+      // If not logged in and trying to access protected routes -> Go to Login
       router.replace('/login');
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(tabs)');
+      // If logged in and trying to access login page -> Go to Tabs
+      router.replace('/welcome');
     }
   }, [isAuthenticated, authLoading, segments, isMounted, isServerReady]);
 
+  // Loading State: Show if Auth is loading OR Server Check is running
   const showLoading = (authLoading || !isMounted || isCheckingServer) && !showServerAlert;
 
   return (
@@ -99,7 +105,7 @@ function AppContent() {
   );
 }
 
-// 🟢 3. ROOT EXPORT (WRAPPED WITH ALERT PROVIDER)
+// 🟢 3. ROOT EXPORT
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -109,17 +115,17 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Provider store={store}> 
-      {/* 🟢 WRAPPED HERE: Now every screen has access to showAlert() */}
-      <AlertProvider> 
+    // 🟢 WRAPPED WITH AUTH PROVIDER
+    <AlertProvider> 
+      <AuthProvider>
         <SafeAreaProvider>
           <View style={{ flex: 1, backgroundColor: THEME.colors.bg }}>
             <StatusBar style="dark" backgroundColor={THEME.colors.bg} />
             <AppContent />
           </View>
         </SafeAreaProvider>
-      </AlertProvider>
-    </Provider>
+      </AuthProvider>
+    </AlertProvider>
   );
 }
 

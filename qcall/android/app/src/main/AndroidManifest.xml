@@ -31,6 +31,7 @@
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
         android:requestLegacyExternalStorage="true"
+        
         android:enableOnBackInvokedCallback="false">
 
         <activity

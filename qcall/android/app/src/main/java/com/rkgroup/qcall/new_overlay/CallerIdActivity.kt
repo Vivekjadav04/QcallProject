@@ -3,6 +3,8 @@ package com.rkgroup.qcall.new_overlay
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -10,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
+import android.util.Base64
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.AnimationUtils
@@ -20,9 +23,11 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
-import com.rkgroup.qcall.MainActivity // Ensure this import is correct for your package
 import com.rkgroup.qcall.R
 import kotlinx.coroutines.*
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 
 class CallerIdActivity : AppCompatActivity() {
@@ -50,8 +55,7 @@ class CallerIdActivity : AppCompatActivity() {
     private val COLOR_RED = Color.parseColor("#FF3B30")   // Spam
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // 🟢 1. FORCE WINDOW TYPE TO OVERLAY (Top Priority)
-        // This is crucial for floating over the System Dialer
+        // 1. FORCE WINDOW TYPE TO OVERLAY (Top Priority)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val params = window.attributes
             params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -61,7 +65,7 @@ class CallerIdActivity : AppCompatActivity() {
             window.attributes = params
         }
 
-        // 🟢 2. LOCK SCREEN & WAKE UP LOGIC
+        // 2. LOCK SCREEN & WAKE UP LOGIC
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -111,39 +115,33 @@ class CallerIdActivity : AppCompatActivity() {
         // 5. CLICK LISTENERS
         btnClose.setOnClickListener { closeOverlay() }
 
-        // Call Action
         btnActionCall.setOnClickListener {
             closeOverlay()
             val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
             startActivity(callIntent)
         }
 
-        // Report Spam -> React Native
         btnActionSpam.setOnClickListener {
             closeOverlay()
             openDeepLink("caller-id/spam-report", number)
         }
 
-        // Save Contact -> React Native
         btnActionSave.setOnClickListener {
             closeOverlay()
             openDeepLink("caller-id/save-contact", number)
         }
 
-        // Block Number -> React Native
         btnActionBlock.setOnClickListener {
             closeOverlay()
             openDeepLink("caller-id/block-number", number)
         }
 
-        // View Profile -> React Native
         btnViewProfile.setOnClickListener {
             closeOverlay()
             openDeepLink("caller-id/view-profile", number)
         }
 
         // 6. START IDENTIFICATION LOGIC (With Delay)
-        // Delay ensures we pop up AFTER the system dialer has settled
         Handler(Looper.getMainLooper()).postDelayed({
             identifyCaller(number, passedName)
             showCard()
@@ -165,10 +163,8 @@ class CallerIdActivity : AppCompatActivity() {
         }, 200)
     }
 
-    // 🟢 DEEP LINK BRIDGE: Opens Expo Router Paths
     private fun openDeepLink(path: String, number: String) {
         try {
-            // URI: qcall://caller-id/spam-report?number=12345
             val uri = Uri.parse("qcall://$path?number=$number")
             val intent = Intent(Intent.ACTION_VIEW, uri)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -178,33 +174,76 @@ class CallerIdActivity : AppCompatActivity() {
         }
     }
 
-    // 🟢 LOGIC: Local -> DB/Passed -> Fallback
+    // 🟢 UPDATED LOGIC: Local -> Network (Backend) -> Fallback
     private fun identifyCaller(number: String, passedName: String?) {
         CoroutineScope(Dispatchers.IO).launch {
             
             // Step A: Check Local Contacts
             val localContact = getLocalContactInfo(number)
 
-            withContext(Dispatchers.Main) {
-                if (localContact != null) {
-                    // Found locally (Name + Photo)
-                    updateUI(localContact.name, localContact.photoUri, isSpam = false, isSaved = true)
-                } else {
-                    // Step B: Check Passed Name / DB Mock
-                    if (!passedName.isNullOrEmpty() && passedName != "Unknown") {
-                        updateUI(passedName, null, isSpam = false, isSaved = false)
-                    } else {
-                        // Step C: Spam Check / Unknown
-                        val isSpam = number.startsWith("140") || number.contains("spam")
-                        val finalName = if(isSpam) "Likely Spam" else "Unknown Caller"
-                        updateUI(finalName, null, isSpam = isSpam, isSaved = false)
+            if (localContact != null) {
+                withContext(Dispatchers.Main) {
+                    updateUI(localContact.name, localContact.photoUri, null, isSpam = false, isSaved = true)
+                }
+                return@launch
+            }
+
+            // Step B: Check Backend API (Network Request)
+            try {
+                // 🔴 IMPORTANT: Ensure your PC IP is correct and Port is 5000
+                val urlString = "http://192.168.1.5:5000/api/contacts/identify?number=$number"
+                val url = URL(urlString)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 3000 // 3 seconds timeout
+                connection.readTimeout = 3000
+
+                if (connection.responseCode == 200) {
+                    val stream = connection.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(stream)
+                    
+                    val found = json.optBoolean("found", false)
+                    
+                    if (found) {
+                        val name = json.optString("name", "Unknown")
+                        val isSpam = json.optBoolean("isSpam", false)
+                        val photoBase64 = json.optString("photo", "")
+                        
+                        // Decode Base64 Photo if present
+                        var apiBitmap: Bitmap? = null
+                        if (photoBase64.isNotEmpty()) {
+                            try {
+                                val decodedString = Base64.decode(photoBase64, Base64.DEFAULT)
+                                apiBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            updateUI(name, null, apiBitmap, isSpam = isSpam, isSaved = false)
+                        }
+                        return@launch
                     }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // Step C: Fallback / Unknown / Spam Check
+            withContext(Dispatchers.Main) {
+                if (!passedName.isNullOrEmpty() && passedName != "Unknown") {
+                    updateUI(passedName, null, null, isSpam = false, isSaved = false)
+                } else {
+                    // Simple Offline Spam Check
+                    val isSpam = number.startsWith("140") || number.contains("spam")
+                    val finalName = if(isSpam) "Likely Spam" else "Unknown Caller"
+                    updateUI(finalName, null, null, isSpam = isSpam, isSaved = false)
                 }
             }
         }
     }
 
-    private fun updateUI(name: String, photoUri: String?, isSpam: Boolean, isSaved: Boolean) {
+    // 🟢 UPDATED UI: Now accepts Bitmap for Base64 photos
+    private fun updateUI(name: String, photoUri: String?, photoBitmap: Bitmap?, isSpam: Boolean, isSaved: Boolean) {
         txtName.text = name
         
         // 1. Header & Text Color
@@ -218,17 +257,25 @@ class CallerIdActivity : AppCompatActivity() {
             txtAvatarFallback.setTextColor(COLOR_BLUE)
         }
 
-        // 2. Avatar Logic (Photo vs Letter)
-        if (photoUri != null) {
-            try {
+        // 2. Avatar Logic (Bitmap > Uri > Fallback)
+        imgAvatar.visibility = View.GONE
+        txtAvatarFallback.visibility = View.VISIBLE
+        
+        try {
+            if (photoBitmap != null) {
+                imgAvatar.visibility = View.VISIBLE
+                txtAvatarFallback.visibility = View.GONE
+                imgAvatar.setImageBitmap(photoBitmap)
+                imgAvatar.setColorFilter(null)
+            } else if (photoUri != null) {
                 imgAvatar.visibility = View.VISIBLE
                 txtAvatarFallback.visibility = View.GONE
                 imgAvatar.setImageURI(Uri.parse(photoUri))
-                imgAvatar.setColorFilter(null) // Clear any tint
-            } catch (e: Exception) {
+                imgAvatar.setColorFilter(null)
+            } else {
                 showFallbackText(name)
             }
-        } else {
+        } catch (e: Exception) {
             showFallbackText(name)
         }
     }
@@ -236,8 +283,6 @@ class CallerIdActivity : AppCompatActivity() {
     private fun showFallbackText(name: String) {
         imgAvatar.visibility = View.GONE
         txtAvatarFallback.visibility = View.VISIBLE
-        
-        // Get First Letter
         val letter = if (name.isNotEmpty()) name.substring(0, 1).uppercase(Locale.getDefault()) else "?"
         txtAvatarFallback.text = letter
     }
@@ -245,12 +290,11 @@ class CallerIdActivity : AppCompatActivity() {
     // Helper Data Class
     data class LocalContact(val name: String, val photoUri: String?)
 
-    // 🟢 HELPER: Fetch Name & Photo from ContactsContract
+    // Fetch Local Contact
     private fun getLocalContactInfo(phoneNumber: String): LocalContact? {
         if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             return null
         }
-        
         var contact: LocalContact? = null
         try {
             val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
@@ -259,7 +303,6 @@ class CallerIdActivity : AppCompatActivity() {
                 ContactsContract.PhoneLookup.PHOTO_URI
             )
             val cursor = contentResolver.query(uri, projection, null, null, null)
-            
             cursor?.use {
                 if (it.moveToFirst()) {
                     val name = it.getString(0)

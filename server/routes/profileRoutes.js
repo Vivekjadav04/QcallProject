@@ -1,55 +1,42 @@
 const express = require('express');
 const router = express.Router();
+const authMiddleware = require('../middleware/authMiddleware');
 const User = require('../models/User');
 
-// 1. GET USER PROFILE
-router.get('/:phone', async (req, res) => {
+// 🟢 1. GET CURRENT USER PROFILE
+// The App calls this automatically on startup
+router.get('/', authMiddleware, async (req, res) => {
   try {
-    // Find user by phone number
-    const user = await User.findOne({ phoneNumber: req.params.phone });
+    // req.user.id comes from the Token (authMiddleware)
+    // We don't need a phone number in the URL
+    const user = await User.findById(req.user.id).select('-password');
     
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
     
     // Return the user data
-    res.json({ success: true, data: user });
+    res.json(user); // Send raw user object to match Frontend expectation
   } catch (err) {
     console.error("Get Profile Error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 2. UPDATE PROFILE (PUT)
-router.put('/update', async (req, res) => {
-  // 1. Separate the ID (phoneNumber) from the Data (updates)
-  const { phoneNumber, ...updates } = req.body;
-
-  // --- DEBUG LOGS ---
-  console.log("👉 UPDATE REQUEST RECEIVED");
-  console.log("Target Phone:", phoneNumber);
-  console.log("Fields updating:", Object.keys(updates));
-  // ------------------
-
-  if (!phoneNumber) {
-    return res.status(400).json({ success: false, message: "Phone number is required in the body" });
-  }
-
+// 🟢 2. UPDATE PROFILE (PUT)
+router.put('/update', authMiddleware, async (req, res) => {
   try {
-    // 2. Find and Update the User
-    const updatedUser = await User.findOneAndUpdate(
-      { phoneNumber: phoneNumber }, 
-      { $set: updates }, // Updates all fields sent from Frontend (including nested address/company)
-      { new: true, runValidators: true } // Returns the NEW updated document
-    );
+    // We use the ID from the token, so we can't update someone else's profile
+    const userId = req.user.id;
+    const updates = req.body;
 
-    if (!updatedUser) {
-      console.log("❌ User not found in DB");
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+    const updatedUser = await User.findByIdAndUpdate(
+      userId, 
+      { $set: updates }, 
+      { new: true, runValidators: true }
+    ).select('-password');
 
-    console.log("✅ Profile Updated Successfully");
-    res.json({ success: true, data: updatedUser });
+    res.json(updatedUser);
 
   } catch (err) {
     console.error("❌ Update Error:", err);

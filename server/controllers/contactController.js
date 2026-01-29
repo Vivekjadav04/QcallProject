@@ -6,25 +6,73 @@ const SpamReport = require('../models/SpamReport');
 // Helper: Clean phone numbers (+91-987... -> 91987...)
 const normalizeNumber = (num) => num ? num.replace(/[^\d+]/g, '') : '';
 
-// 🟢 1. IDENTIFY CALLER (The Waterfall Logic)
+// 🟢 1. IDENTIFY CALLER (The "Nuclear" Regex Logic)
 exports.identifyCaller = async (req, res) => {
   try {
-    const cleanNum = normalizeNumber(req.query.number);
-    if (!cleanNum) return res.status(400).json({ msg: "Invalid number" });
+    const rawNum = req.query.number;
+    // Remove all non-numeric chars to get pure digits for length check
+    const cleanNum = rawNum ? rawNum.replace(/[^\d]/g, '') : '';
+    
+    if (!cleanNum || cleanNum.length < 10) { 
+        return res.status(400).json({ msg: "Invalid number" });
+    }
 
-    // PRIORITY 1: Check Registered Users (Blue Badge)
-    const appUser = await User.findOne({ phoneNumber: cleanNum })
-      .select('firstName lastName profilePhoto address.city company.title settings');
+    // 1. GET THE FINGERPRINT (Last 10 Digits)
+    // This is the common factor between +9199..., 099..., and 99...
+    const last10 = cleanNum.slice(-10);
+    
+    // 🔍 SEARCH LOGIC: Find any number that CONTAINS these 10 digits
+    // This fixes the "+91 vs 0" mismatch problem entirely.
+    const searchCriteria = { phoneNumber: { $regex: last10, $options: 'i' } };
 
-    if (appUser) {
-        // Privacy Check
-        if (appUser.settings && appUser.settings.showCallerID === false) {
-             return res.json({ found: false, type: "PRIVATE", name: "Private Number" });
+    // 2. PARALLEL SEARCH (Global, User, Spam)
+    // We search all 3 collections simultaneously for maximum speed
+    const [spamReports, appUser, globalEntry] = await Promise.all([
+        SpamReport.find(searchCriteria), // Find ALL matching reports
+        User.findOne(searchCriteria),
+        GlobalNumber.findOne(searchCriteria)
+    ]);
+
+    // 3. PRIORITY LOGIC (The "Override")
+
+    // ➤ STEP A: CHECK SPAM (Force Red Screen)
+    const spamCount = spamReports.length;
+    const isGlobalSpam = globalEntry && globalEntry.spamScore >= 10;
+    
+    // IF FOUND IN SPAM REPORTS -> IT IS RED. NO EXCEPTIONS.
+    if (spamCount > 0 || isGlobalSpam) {
+        
+        // 🧠 NAME RECOVERY: Get the best name available
+        let bestName = "Likely Spam"; // Default
+        
+        // If Global has a name, STEAL IT for the Red Screen (e.g. "Fake Bank Agent")
+        if (globalEntry && globalEntry.likelyName) {
+            bestName = globalEntry.likelyName;
+        } 
+        // If it's a User but also Spam, use their name
+        else if (appUser) {
+            bestName = `${appUser.firstName} ${appUser.lastName}`;
         }
 
         return res.json({
             found: true,
-            type: "USER",
+            type: "SPAM",           // 🚨 FORCE RED SCREEN
+            name: bestName,         // Shows the name we found
+            isSpam: true,
+            spamReports: spamCount,
+            location: globalEntry?.location || "",
+            spamType: globalEntry?.tags?.[0] || "Reported Spam"
+        });
+    }
+
+    // ➤ STEP B: CHECK USER (Blue Screen)
+    if (appUser) {
+        if (appUser.settings?.showCallerID === false) {
+             return res.json({ found: false, type: "PRIVATE", name: "Private Number" });
+        }
+        return res.json({
+            found: true,
+            type: "USER",        // <--- Triggers BLUE screen
             name: `${appUser.firstName} ${appUser.lastName}`.trim(),
             photo: appUser.profilePhoto,
             location: appUser.address ? appUser.address.city : "", 
@@ -34,22 +82,18 @@ exports.identifyCaller = async (req, res) => {
         });
     }
 
-    // PRIORITY 2: Check Global Directory (Crowdsourced)
-    const globalEntry = await GlobalNumber.findOne({ phoneNumber: cleanNum });
+    // ➤ STEP C: CHECK GLOBAL (Blue Screen)
     if (globalEntry) {
-        const isSpam = globalEntry.spamScore >= 10;
         return res.json({
             found: true,
-            type: isSpam ? "SPAM" : "GLOBAL",
-            name: globalEntry.likelyName,
-            location: globalEntry.location || "", 
-            isSpam: isSpam,
-            spamScore: globalEntry.spamScore,
-            spamType: isSpam ? (globalEntry.tags[0] || "Reported Spam") : null
+            type: "GLOBAL",      // <--- Triggers BLUE screen
+            name: globalEntry.likelyName || "Unknown Caller",
+            location: globalEntry.location || "",
+            isSpam: false
         });
     }
 
-    // PRIORITY 3: Unknown
+    // --- STEP D: Unknown ---
     return res.json({ found: false, type: "UNKNOWN", name: "Unknown Caller", isSpam: false });
 
   } catch (err) {
@@ -62,19 +106,10 @@ exports.identifyCaller = async (req, res) => {
 exports.syncContacts = async (req, res) => {
   try {
     const { contacts } = req.body;
-    
-    // CRITICAL FIX: Ensure we use the ID from the middleware
     const userId = req.user ? req.user.id : null; 
 
-    if (!userId) {
-        return res.status(401).json({ msg: "User ID missing. Token invalid." });
-    }
-
-    if (!contacts || !Array.isArray(contacts)) {
-        return res.status(400).json({ msg: "No contacts provided" });
-    }
-
-    console.log(`[SYNC] Processing ${contacts.length} contacts for User: ${userId}`);
+    if (!userId) return res.status(401).json({ msg: "User ID missing. Token invalid." });
+    if (!contacts || !Array.isArray(contacts)) return res.status(400).json({ msg: "No contacts provided" });
 
     // A. Prepare Bulk Operations for User's Private Book
     const ops = contacts.map(c => {
@@ -97,7 +132,6 @@ exports.syncContacts = async (req, res) => {
     }
 
     // B. Background Update for Global Directory
-    // (We don't await this so the response is fast)
     contacts.forEach(c => updateGlobalName(c.number, c.name));
 
     res.json({ success: true, count: ops.length });
@@ -113,7 +147,8 @@ exports.reportSpam = async (req, res) => {
   try {
     const { number, tag, location, comment } = req.body;
     const cleanNum = normalizeNumber(number);
-    const userId = req.user.id;
+    // Ensure auth middleware is used
+    const userId = req.user ? req.user.id : null;
 
     if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
 
@@ -121,7 +156,7 @@ exports.reportSpam = async (req, res) => {
     await SpamReport.create({
       phoneNumber: cleanNum,
       reportedBy: userId,
-      tag,
+      tag: tag || "Spam",
       location,
       comment
     });
@@ -131,13 +166,13 @@ exports.reportSpam = async (req, res) => {
       { phoneNumber: cleanNum },
       { 
           $inc: { spamScore: 10 }, 
-          $addToSet: { tags: tag },
-          $set: { location: location } // Update location if provided
+          $addToSet: { tags: tag || "Spam" },
+          $set: { location: location } 
       },
       { upsert: true }
     );
 
-    res.json({ msg: "Report Saved" });
+    res.json({ success: true, msg: "Number reported as spam successfully" });
 
   } catch (err) {
     console.error("Report Error:", err.message);
@@ -163,7 +198,6 @@ exports.reportNotSpam = async (req, res) => {
 };
 
 // 🧠 HELPER: Intelligent Name Update
-// Takes a number and name, and votes for the best name in the Global DB
 async function updateGlobalName(num, name) {
   try {
     const cleanNum = normalizeNumber(num);
@@ -172,28 +206,24 @@ async function updateGlobalName(num, name) {
     let entry = await GlobalNumber.findOne({ phoneNumber: cleanNum });
     
     if (!entry) {
-      // New Entry
       entry = new GlobalNumber({
         phoneNumber: cleanNum,
         likelyName: name,
         nameVariations: [{ name, count: 1 }]
       });
     } else {
-      // Existing Entry - Vote logic
       const variation = entry.nameVariations.find(v => v.name.toLowerCase() === name.toLowerCase());
       if (variation) {
           variation.count++;
       } else {
           entry.nameVariations.push({ name, count: 1 });
       }
-
       // Find the most popular name
       entry.nameVariations.sort((a, b) => b.count - a.count);
       entry.likelyName = entry.nameVariations[0].name;
     }
     await entry.save();
   } catch (e) { 
-      // Silent fail is okay for background tasks
       console.error("Global Update Fail:", e.message); 
   }
 }

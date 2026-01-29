@@ -15,10 +15,10 @@ import * as Contacts from 'expo-contacts';
 import { useRouter, useFocusEffect } from 'expo-router';
 
 // 🟢 Services & Hooks
-import { useAuth } from '../../hooks/useAuth'; // Check path (hooks vs services)
+import { useAuth } from '../../hooks/useAuth'; 
 import { CallService } from '../../services/CallService'; 
-import { SyncService } from '../../services/SyncService'; // 🟢 IMPORTED SYNC
-import { apiService } from '../../services/api';         // 🟢 IMPORTED API
+import { SyncService } from '../../services/SyncService'; 
+import { apiService } from '../../services/api'; 
 import DialerModal from '../../components/DialerModal'; 
 import { useCustomAlert } from '../../context/AlertContext';
 
@@ -40,10 +40,6 @@ const THEME = {
     tabBg: '#E2E8F0'
   }
 };
-
-// ... (Keep Helpers, HeaderComponent, AdCard, DebugButtons, CallLogItem exactly as they were) ...
-// To save space, I am focusing on the Main Component where the logic change is needed.
-// Paste your previous UI components here.
 
 // --- HELPERS ---
 const normalizeNumber = (num: string) => num ? num.replace(/[^\d+]/g, '') : '';
@@ -86,7 +82,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
       <View style={styles.searchBlock}>
         <Feather name="search" size={18} color={THEME.colors.textSub} />
         <TextInput 
-          placeholder="Search number or name..." 
+          placeholder="Filter logs..." 
           placeholderTextColor={THEME.colors.textSub} 
           style={styles.searchInput}
           value={searchText}
@@ -227,7 +223,7 @@ export default function CallLogScreen() {
   const router = useRouter(); 
   const insets = useSafeAreaInsets();
   
-  const { user } = useAuth(); // Assuming this context exists
+  const { user } = useAuth(); 
   const { showAlert } = useCustomAlert();
   
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
@@ -236,23 +232,16 @@ export default function CallLogScreen() {
   const [searchText, setSearchText] = useState('');
   const [permissionGranted, setPermissionGranted] = useState(false);
 
-  // 🟢 1. BACKGROUND SYNC TRIGGER (The Fix)
   useEffect(() => {
     const initSync = async () => {
-      // Check if user is logged in before syncing
       const isAuthenticated = await apiService.isAuthenticated();
-      
       if (isAuthenticated) {
-        console.log("🚀 Home Screen: Starting Background Contact Sync...");
-        // Start sync (It handles permissions internally)
         SyncService.startSync();
       }
     };
-
     initSync();
   }, []);
 
-  // --- DATA LOADING ---
   const loadData = async () => {
     try {
       if (Platform.OS === 'android') {
@@ -306,9 +295,7 @@ export default function CallLogScreen() {
   useFocusEffect(
     useCallback(() => {
       const init = async () => {
-        // Preload contacts for display
         CallService.preloadContacts();
-        
         if (Platform.OS === 'android') {
           const hasLogPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
           if (hasLogPerm) {
@@ -339,30 +326,19 @@ export default function CallLogScreen() {
 
   const handleNativeCall = useCallback(async (name: string | null, number: string) => {
     const cleanNumber = normalizeNumber(number);
-    
     if (Platform.OS === 'android') {
         try {
-            let isDefault = false;
-            try {
-                 isDefault = await CallManagerModule.checkIsDefaultDialer();
-            } catch (err) {
-                 console.warn("Module check failed, assuming false", err);
-            }
-            
+            let isDefault = await CallManagerModule.checkIsDefaultDialer().catch(() => false);
             if (!isDefault) {
                 showAlert(
                     "Permission Required",
-                    "To make calls directly from this app, QCall must be your default phone app. Tap Retry to set it.",
+                    "To make calls, QCall must be your default phone app.",
                     "warning",
-                    async () => {
-                        await CallManagerModule.requestDefaultDialer();
-                    }
+                    async () => { await CallManagerModule.requestDefaultDialer(); }
                 );
                 return; 
             }
-
             CallManagerModule.startCall(cleanNumber);
-            
         } catch (e) {
             showAlert("Error", "Could not initiate call service.", "error");
         }
@@ -373,13 +349,10 @@ export default function CallLogScreen() {
 
   const sections = useMemo(() => {
     if (!masterLogs.length) return [];
-
     let result = masterLogs;
     if (searchText) result = result.filter(log => log.number.includes(searchText) || (log.name && log.name.toLowerCase().includes(searchText.toLowerCase())));
-    
     const groups: any = { 'Today': [], 'Yesterday': [] };
     const otherKeys: string[] = [];
-    
     result.forEach(log => {
         const label = getDayLabel(log.timestamp);
         if(label === 'Today' || label === 'Yesterday') {
@@ -389,14 +362,11 @@ export default function CallLogScreen() {
             groups[label].push(log);
         }
     });
-
-    const finalSections = [
+    return [
         { title: 'Today', data: groups['Today'] }, 
         { title: 'Yesterday', data: groups['Yesterday'] },
         ...otherKeys.map(k => ({ title: k, data: groups[k] }))
-    ];
-    
-    return finalSections.filter(s => s.data && s.data.length > 0);
+    ].filter(s => s.data && s.data.length > 0);
   }, [masterLogs, searchText]);
 
   return (
@@ -412,7 +382,6 @@ export default function CallLogScreen() {
         />
         
         <AdCard />
-        
         <DebugButtons />
 
         {!permissionGranted && (
@@ -440,8 +409,20 @@ export default function CallLogScreen() {
           }
         />
 
+        {/* 🟢 1. SEARCH/IDENTIFY BUTTON */}
+<TouchableOpacity 
+  style={[styles.fab, { bottom: insets.bottom + 190, backgroundColor: '#3B82F6' }]} 
+  onPress={() => router.push('/search')}  // ✅ CORRECT PATH
+  activeOpacity={0.9}
+>
+  <View style={styles.fabContent}>
+     <Feather name="search" size={26} color="#FFF" />
+  </View>
+</TouchableOpacity>
+
+        {/* 🟢 2. DIALER BUTTON */}
         <TouchableOpacity 
-          style={[styles.fab, { bottom: insets.bottom + 24 }]} 
+          style={[styles.fab, { bottom: insets.bottom + 110 }]} 
           onPress={() => setDialerVisible(true)}
           activeOpacity={0.9}
         >
@@ -509,8 +490,10 @@ const styles = StyleSheet.create({
 
   callBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 10, shadowColor: THEME.colors.primary, shadowOpacity: 0.3, shadowRadius: 8 },
 
-  fab: { position: 'absolute', right: 20, shadowColor: THEME.colors.primary, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10 },
+  // 🟢 FLOATING BUTTON STYLES
+  fab: { position: 'absolute', right: 20, shadowColor: THEME.colors.primary, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10, borderRadius: 30 },
   fabGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  fabContent: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: '#3B82F6' },
 
   permErrorBox: { marginHorizontal: 20, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FECACA' },
   permErrorText: { color: '#DC2626', fontWeight: '600', fontSize: 13, marginLeft: 8 },

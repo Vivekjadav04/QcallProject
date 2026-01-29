@@ -30,6 +30,7 @@
         android:allowBackup="true"
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
         
         android:enableOnBackInvokedCallback="false">
@@ -41,6 +42,7 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:showWhenLocked="true"
+            android:usesCleartextTraffic="true"
             android:turnScreenOn="true"
             android:exported="true" />
 

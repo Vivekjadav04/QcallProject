@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
+import android.telecom.TelecomManager
 import android.util.Base64
 import android.util.Log
 import android.view.View
@@ -25,6 +26,7 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.core.content.ContextCompat
 import com.rkgroup.qcall.R
 import kotlinx.coroutines.*
 import org.json.JSONObject
@@ -36,9 +38,8 @@ class CallerIdActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "QCall-Native"
-        // ⚠️ CRITICAL: DOUBLE CHECK THIS IP ADDRESS. 
-        // Run 'ipconfig' (Windows) or 'ifconfig' (Mac) to get your PC's IP.
-        private const val SERVER_URL = "http://192.168.43.22:5000/api/contacts/identify"
+        // ⚠️ CRITICAL: Ensure this matches your current Ngrok URL
+        private const val SERVER_URL = "https://unintegrable-adalynn-uninvokable.ngrok-free.dev/api/contacts/identify"
     }
 
     // UI Elements
@@ -65,6 +66,7 @@ class CallerIdActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d(TAG, "🚀 CallerIdActivity Created")
 
+        // 1. Window Configuration for Overlay (Show over Lock Screen)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val params = window.attributes
             params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -94,6 +96,7 @@ class CallerIdActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_caller_id)
         
+        // 2. Bind Views
         mainCard = findViewById(R.id.mainCard)
         headerContainer = findViewById(R.id.headerContainer)
         txtName = findViewById(R.id.txtName)
@@ -116,19 +119,76 @@ class CallerIdActivity : AppCompatActivity() {
         val passedName = intent.getStringExtra("name")
         txtNumber.text = number
 
+        // ---------------- BUTTON ACTIONS ----------------
+
+        // ❌ Close Button
         btnClose.setOnClickListener { closeOverlay() }
 
+        // 📞 BUTTON 1: CALL / REDIRECT TO ONGOING CALL
         btnActionCall.setOnClickListener {
             closeOverlay()
-            val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
-            startActivity(callIntent)
+            try {
+                val telecomManager = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+                
+                // Check if we are already in a call (requires permission READ_PHONE_STATE, usually granted to Default Dialer)
+                if (checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED && telecomManager.isInCall) {
+                    Log.d(TAG, "Ongoing call detected. Redirecting to In-Call Screen.")
+                    telecomManager.showInCallScreen(false)
+                } else {
+                    Log.d(TAG, "No active call found. Initiating new dial.")
+                    val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
+                    callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(callIntent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in Call Action", e)
+                val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
+                callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(callIntent)
+            }
         }
-        
+
+        // 🟢 UPDATED DEEP LINKS FOR EXPO ROUTER PATHS
+
+        // 🚫 BUTTON 2: REPORT SPAM -> Opens 'app/caller-id/spam-report.tsx'
+        btnActionSpam.setOnClickListener {
+            openDeepLink("qcall://caller-id/spam-report?number=$number", "Report Spam")
+        }
+
+        // 💾 BUTTON 3: SAVE CONTACT -> Opens 'app/caller-id/save-contact.tsx'
+        btnActionSave.setOnClickListener {
+            openDeepLink("qcall://caller-id/save-contact?number=$number", "Save Contact")
+        }
+
+        // 🛑 BUTTON 4: BLOCK NUMBER -> Opens 'app/caller-id/block-number.tsx'
+        btnActionBlock.setOnClickListener {
+            openDeepLink("qcall://caller-id/block-number?number=$number", "Block Number")
+        }
+
+        // 👤 VIEW PROFILE -> Opens 'app/caller-id/view-profile.tsx'
+        btnViewProfile.setOnClickListener {
+             openDeepLink("qcall://caller-id/view-profile?number=$number", "View Profile")
+        }
+
+        // ---------------- IDENTIFICATION LOGIC ----------------
         Log.d(TAG, "⏳ Waiting 4.5 seconds before showing overlay...")
         Handler(Looper.getMainLooper()).postDelayed({
             identifyCaller(number, passedName)
             showCard()
         }, 4500)
+    }
+
+    // Helper to open Deep Links cleanly
+    private fun openDeepLink(link: String, actionName: String) {
+        try {
+            Log.d(TAG, "Opening App for $actionName: $link")
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            closeOverlay()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening deep link", e)
+        }
     }
 
     private fun showCard() {
@@ -151,15 +211,13 @@ class CallerIdActivity : AppCompatActivity() {
         mainCard.startAnimation(anim)
     }
 
-    // 🟢 UPDATED IDENTIFICATION LOGIC (With Double-Check & Error Reporting)
+    // ---------------- SERVER & DATA LOGIC ----------------
     private fun identifyCaller(number: String, passedName: String?) {
         CoroutineScope(Dispatchers.IO).launch {
-            
-            // 1. CLEAN NUMBER & EXTRACT LAST 10
             val rawNum = number.replace(Regex("[^0-9]"), "")
             val last10 = if (rawNum.length >= 10) rawNum.takeLast(10) else rawNum
             
-            // --- STEP A: LOCAL CHECK ---
+            // A. Local Check
             val localContact = getLocalContactInfo(number)
             if (localContact != null) {
                 withContext(Dispatchers.Main) {
@@ -168,29 +226,21 @@ class CallerIdActivity : AppCompatActivity() {
                 return@launch
             }
 
-            // --- STEP B: SERVER CHECK (Attempt 1: With '91') ---
+            // B. Server Check (Try '91' then '10 digits')
             val queryWithCode = "91$last10"
             var result = fetchFromServer(queryWithCode)
-
-            // --- STEP C: RETRY (Attempt 2: Exact 10 Digits) ---
             if (result == null || !result.found) {
-                 Log.d(TAG, "⚠️ Attempt 1 ('91') Failed. Retrying with Exact 10 Digits: $last10")
                  val retryResult = fetchFromServer(last10)
-                 if (retryResult != null && retryResult.found) {
-                     result = retryResult
-                 }
+                 if (retryResult != null && retryResult.found) result = retryResult
             }
 
-            // --- STEP D: HANDLE RESULT OR ERROR ---
+            // C. UI Update
             withContext(Dispatchers.Main) {
                 if (result != null && result.found) {
-                    // ✅ SUCCESS
                     updateUI(result.name, null, result.bitmap, isSpam = result.isSpam, isSaved = false)
                 } else if (result != null && result.errorMessage != null) {
-                    // ❌ NETWORK ERROR (Show this on screen for debugging!)
                     updateUI("Error: ${result.errorMessage}", null, null, isSpam = true, isSaved = false)
                 } else {
-                    // 🤷 NOT FOUND
                     val finalName = if (!passedName.isNullOrEmpty() && passedName != "Unknown") passedName else "Unknown Caller"
                     updateUI(finalName, null, null, isSpam = false, isSaved = false)
                 }
@@ -198,11 +248,9 @@ class CallerIdActivity : AppCompatActivity() {
         }
     }
 
-    // Helper to fetch from server
     private fun fetchFromServer(queryNumber: String): ServerResult? {
         try {
             val urlString = "$SERVER_URL?number=$queryNumber"
-            Log.d(TAG, "🌐 Querying: $urlString")
             val url = URL(urlString)
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
@@ -213,13 +261,10 @@ class CallerIdActivity : AppCompatActivity() {
             if (code == 200) {
                 val stream = connection.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(stream)
-                val found = json.optBoolean("found", false)
-                
-                if (found) {
+                if (json.optBoolean("found", false)) {
                     val name = json.optString("name", "Unknown")
                     val isSpam = json.optBoolean("isSpam", false)
                     val photoBase64 = json.optString("photo", "")
-                    
                     var apiBitmap: Bitmap? = null
                     if (photoBase64.isNotEmpty()) {
                         try {
@@ -236,7 +281,6 @@ class CallerIdActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            // Return the specific error to the UI
             return ServerResult(false, null, false, null, e.message ?: "Connect Fail")
         }
     }
@@ -253,7 +297,7 @@ class CallerIdActivity : AppCompatActivity() {
         val displayName = name ?: "Unknown Caller"
         txtName.text = displayName
         
-        if (isSpam || displayName.startsWith("Error:")) { // Show red for errors too
+        if (isSpam || displayName.startsWith("Error:")) {
             headerContainer.setBackgroundColor(COLOR_RED)
             txtTopInfo.text = if (displayName.startsWith("Error:")) "Connection Error" else "Likely Spam"
             txtAvatarFallback.setTextColor(COLOR_RED)

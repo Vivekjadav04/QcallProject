@@ -115,56 +115,6 @@ const AdCard = () => (
   </View>
 );
 
-// --- DEBUG BUTTONS ---
-const DebugButtons = () => {
-  const testIncomingLocked = () => {
-    CallManagerModule.launchTestIncomingUI("Elon Musk", "+1 (555) 019-9999");
-  };
-  const testIncomingUnlocked = () => {
-    CallManagerModule.showTestNotification("Jeff Bezos", "+1 (555) 020-8888");
-  };
-  const testOverlay = () => {
-    Alert.alert(
-        "Overlay Test",
-        "Overlay will appear in 3 seconds. Minimize the app now to see it over your wallpaper.",
-        [
-            { 
-                text: "Start", 
-                onPress: () => {
-                    setTimeout(() => {
-                        if (CallManagerModule?.launchTestIncomingUI) {
-                            CallManagerModule.launchTestIncomingUI("Test Caller", "9924162127");
-                        } else {
-                            console.warn("CallManagerModule not linked");
-                        }
-                    }, 3000); 
-                }
-            }
-        ]
-    );
-  };
-
-  return (
-    <View style={styles.debugContainer}>
-      <Text style={styles.debugLabel}>🚧 NATIVE UI TESTS</Text>
-      <View style={styles.debugRow}>
-        <TouchableOpacity style={[styles.debugBtn, { backgroundColor: THEME.colors.success }]} onPress={testIncomingLocked}>
-          <Feather name="lock" size={16} color="#FFF" />
-          <Text style={styles.debugText}>Locked</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.debugBtn, { backgroundColor: '#8B5CF6' }]} onPress={testIncomingUnlocked}>
-          <Feather name="bell" size={16} color="#FFF" />
-          <Text style={styles.debugText}>Notify</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.debugBtn, { backgroundColor: '#EF4444' }]} onPress={testOverlay}>
-          <Feather name="layers" size={16} color="#FFF" />
-          <Text style={styles.debugText}>Overlay</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
 const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
   const isMissed = item.type === 'missed';
   const anim = useRef(new Animated.Value(0)).current;
@@ -382,7 +332,6 @@ export default function CallLogScreen() {
         />
         
         <AdCard />
-        <DebugButtons />
 
         {!permissionGranted && (
             <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>
@@ -410,15 +359,15 @@ export default function CallLogScreen() {
         />
 
         {/* 🟢 1. SEARCH/IDENTIFY BUTTON */}
-<TouchableOpacity 
-  style={[styles.fab, { bottom: insets.bottom + 190, backgroundColor: '#3B82F6' }]} 
-  onPress={() => router.push('/search')}  // ✅ CORRECT PATH
-  activeOpacity={0.9}
->
-  <View style={styles.fabContent}>
-     <Feather name="search" size={26} color="#FFF" />
-  </View>
-</TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.fab, { bottom: insets.bottom + 190, backgroundColor: '#3B82F6' }]} 
+          onPress={() => router.push('/search')}
+          activeOpacity={0.9}
+        >
+          <View style={styles.fabContent}>
+             <Feather name="search" size={26} color="#FFF" />
+          </View>
+        </TouchableOpacity>
 
         {/* 🟢 2. DIALER BUTTON */}
         <TouchableOpacity 
@@ -460,12 +409,6 @@ const styles = StyleSheet.create({
   adTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
   adDesc: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
   adIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
-
-  debugContainer: { paddingHorizontal: 20, marginBottom: 15 },
-  debugLabel: { fontSize: 10, color: '#94A3B8', fontWeight: '700', marginBottom: 5, letterSpacing: 1 },
-  debugRow: { flexDirection: 'row', gap: 10 },
-  debugBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  debugText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 13 },
 
   sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },

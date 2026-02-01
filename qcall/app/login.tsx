@@ -45,7 +45,9 @@ export default function LoginScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const [devMode, setDevMode] = useState(true); 
+  
+  // 🟢 Set to false so it acts like a real app by default
+  const [devMode, setDevMode] = useState(false); 
 
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current; 
@@ -182,6 +184,10 @@ export default function LoginScreen() {
             </View>
           </Animated.View>
 
+          {/* ❌ DEV MODE TOGGLE COMMENTED OUT 
+            Uncomment this block below if you need the switch back.
+          */}
+          {/*
           <View style={styles.devSection}>
             <TouchableOpacity 
               style={[styles.devToggle, devMode && styles.devToggleActive]} 
@@ -193,6 +199,7 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          */}
 
         </KeyboardAvoidingView>
       </SafeAreaView>

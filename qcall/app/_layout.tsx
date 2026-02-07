@@ -8,16 +8,18 @@ import { THEME } from '../constants/theme';
 import axios from 'axios'; 
 import { API_BASE_URL } from '../constants/config'; 
 
-// 🟢 1. CONTEXT IMPORTS (Redux Removed)
-import { AuthProvider, useAuth } from '../hooks/useAuth'; // New Context Hook
+// 🟢 1. CONTEXT IMPORTS
+import { AuthProvider, useAuth } from '../hooks/useAuth'; 
 import { AlertProvider } from '../context/AlertContext'; 
+import { ContactProvider } from '../context/ContactContext'; // 🟢 NEW
+import { SecureOperationsProvider } from '../context/SecureOperationsContext'; // 🟢 NEW
+
 import CustomAlert from '../components/CustomAlert'; 
 
 // 🟢 2. INNER COMPONENT (The Logic)
 function AppContent() {
-  // 🟢 Updated Hook Usage: We check if 'user' exists to know if authenticated
   const { user, loading: authLoading } = useAuth(); 
-  const isAuthenticated = !!user; // Derived state
+  const isAuthenticated = !!user; 
 
   const router = useRouter();
   const segments = useSegments();
@@ -41,9 +43,7 @@ function AppContent() {
 
     try {
       console.log(`[Health Gate] Pinging: ${API_BASE_URL}`);
-      // Simple Ping to see if backend is alive
       await axios.get(API_BASE_URL, { timeout: 4000 });
-      
       console.log("[Health Gate] Server is Online 🟢");
       setServerReady(true);
     } catch (error) {
@@ -57,21 +57,17 @@ function AppContent() {
 
   // 3. Auth Guard Logic
   useEffect(() => {
-    // Wait until everything is ready
     if (authLoading || !isMounted || !isServerReady) return;
 
     const inAuthGroup = segments[0] === 'login' || segments[0] === 'register' || segments[0] === 'otp';
 
     if (!isAuthenticated && !inAuthGroup) {
-      // If not logged in and trying to access protected routes -> Go to Login
       router.replace('/login');
     } else if (isAuthenticated && inAuthGroup) {
-      // If logged in and trying to access login page -> Go to Tabs
       router.replace('/welcome');
     }
   }, [isAuthenticated, authLoading, segments, isMounted, isServerReady]);
 
-  // Loading State: Show if Auth is loading OR Server Check is running
   const showLoading = (authLoading || !isMounted || isCheckingServer) && !showServerAlert;
 
   return (
@@ -83,9 +79,11 @@ function AppContent() {
         <Stack.Screen name="otp" />
         <Stack.Screen name="edit-profile" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="caller-id/view-profile" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="caller-id/block-number" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="caller-id/spam-report" options={{ presentation: 'modal' }} />
       </Stack>
 
-      {/* 🟢 A. The Gatekeeper Alert (Blocks Interaction) */}
       <CustomAlert 
         visible={showServerAlert}
         type="error"
@@ -95,7 +93,6 @@ function AppContent() {
         onAction={checkServerHealth} 
       />
 
-      {/* 🟢 B. Loading Overlay */}
       {showLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={THEME.colors.primary} />
@@ -115,15 +112,19 @@ export default function RootLayout() {
   }, []);
 
   return (
-    // 🟢 WRAPPED WITH AUTH PROVIDER
+    // 🟢 PROVIDER TREE: Alert -> Auth -> Contact -> SecureOps
     <AlertProvider> 
       <AuthProvider>
-        <SafeAreaProvider>
-          <View style={{ flex: 1, backgroundColor: THEME.colors.bg }}>
-            <StatusBar style="dark" backgroundColor={THEME.colors.bg} />
-            <AppContent />
-          </View>
-        </SafeAreaProvider>
+        <ContactProvider>
+          <SecureOperationsProvider>
+            <SafeAreaProvider>
+              <View style={{ flex: 1, backgroundColor: THEME.colors.bg }}>
+                <StatusBar style="dark" backgroundColor={THEME.colors.bg} />
+                <AppContent />
+              </View>
+            </SafeAreaProvider>
+          </SecureOperationsProvider>
+        </ContactProvider>
       </AuthProvider>
     </AlertProvider>
   );

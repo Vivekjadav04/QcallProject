@@ -16,4 +16,7 @@ router.post('/report', authMiddleware, contactController.reportSpam);
 // 🟢 POST /api/contacts/not-spam
 router.post('/not-spam', authMiddleware, contactController.reportNotSpam);
 
+// 🆕 ADD THIS LINE BELOW (Critical for Block Screen)
+router.post('/block', authMiddleware, contactController.blockNumber);
+
 module.exports = router;

@@ -2,6 +2,7 @@ const User = require('../models/User');
 const UserContact = require('../models/UserContact');
 const GlobalNumber = require('../models/GlobalNumber');
 const SpamReport = require('../models/SpamReport');
+const BlockedNumber = require('../models/BlockedNumber'); 
 
 // Helper: Clean phone numbers (+91-987... -> 91987...)
 const normalizeNumber = (num) => num ? num.replace(/[^\d+]/g, '') : '';
@@ -18,15 +19,12 @@ exports.identifyCaller = async (req, res) => {
     }
 
     // 1. GET THE FINGERPRINT (Last 10 Digits)
-    // This is the common factor between +9199..., 099..., and 99...
     const last10 = cleanNum.slice(-10);
     
     // 🔍 SEARCH LOGIC: Find any number that CONTAINS these 10 digits
-    // This fixes the "+91 vs 0" mismatch problem entirely.
     const searchCriteria = { phoneNumber: { $regex: last10, $options: 'i' } };
 
     // 2. PARALLEL SEARCH (Global, User, Spam)
-    // We search all 3 collections simultaneously for maximum speed
     const [spamReports, appUser, globalEntry] = await Promise.all([
         SpamReport.find(searchCriteria), // Find ALL matching reports
         User.findOne(searchCriteria),
@@ -147,7 +145,6 @@ exports.reportSpam = async (req, res) => {
   try {
     const { number, tag, location, comment } = req.body;
     const cleanNum = normalizeNumber(number);
-    // Ensure auth middleware is used
     const userId = req.user ? req.user.id : null;
 
     if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
@@ -180,21 +177,92 @@ exports.reportSpam = async (req, res) => {
   }
 };
 
-// 🟢 4. NOT SPAM (Correction Logic)
+// 🟢 4. NOT SPAM (🔥 UPDATED: Smart Cleanup Logic)
 exports.reportNotSpam = async (req, res) => {
     try {
         const { number } = req.body;
         const cleanNum = normalizeNumber(number);
-        
-        await GlobalNumber.updateOne(
+        const userId = req.user ? req.user.id : null;
+
+        if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
+        if (!userId) return res.status(401).json({ msg: "Unauthorized" });
+
+        // ➤ STEP A: ZOMBIE KILLER 🧟‍♂️🔫
+        // Find and DELETE the report made by THIS user for THIS number.
+        const deletedReport = await SpamReport.findOneAndDelete({
+            phoneNumber: cleanNum,
+            reportedBy: userId
+        });
+
+        // ➤ STEP B: CALCULATE IMPACT
+        // If we deleted a report, undo the damage (-10). 
+        // If they never reported it but trust it, lower it slightly (-5).
+        const scoreDrop = deletedReport ? -10 : -5;
+
+        // ➤ STEP C: UPDATE GLOBAL SCORE
+        const globalEntry = await GlobalNumber.findOneAndUpdate(
             { phoneNumber: cleanNum },
-            { $inc: { spamScore: -10 } } // Decrease score
+            { $inc: { spamScore: scoreDrop } },
+            { new: true, upsert: true } // Return the NEW updated document
         );
 
-        res.json({ msg: "Marked as safe" });
+        // ➤ STEP D: AUTOMATIC TAG CLEANUP 🧹
+        // If score drops below 10, remove "Spam" tag
+        if (globalEntry.spamScore < 10) {
+            await GlobalNumber.updateOne(
+                { phoneNumber: cleanNum },
+                { $pull: { tags: "Spam" } }
+            );
+        }
+
+        res.json({ 
+            success: true, 
+            msg: deletedReport ? "Report withdrawn. Marked safe." : "Marked as safe.",
+            newScore: globalEntry.spamScore
+        });
+
     } catch (err) {
+        console.error("Safe Mark Error:", err.message);
         res.status(500).json({ msg: "Server Error" });
     }
+};
+
+// 🟢 5. BLOCK NUMBER (Uses BlockedNumber Model)
+exports.blockNumber = async (req, res) => {
+  try {
+    const { number, alsoReportSpam } = req.body;
+    const userId = req.user.id; // From Auth Middleware
+
+    if (!number) return res.status(400).json({ message: "Number is required" });
+
+    const cleanNum = normalizeNumber(number);
+
+    // A. Save to BlockedNumber Collection
+    await BlockedNumber.findOneAndUpdate(
+      { user: userId, phoneNumber: cleanNum },
+      { user: userId, phoneNumber: cleanNum, reason: "Manual Block" },
+      { upsert: true, new: true }
+    );
+
+    // B. Optional: Report as spam globally
+    if (alsoReportSpam && cleanNum) {
+      await GlobalNumber.findOneAndUpdate(
+        { phoneNumber: cleanNum },
+        { 
+          $inc: { spamScore: 10 }, 
+          $addToSet: { tags: "Blocked" },
+          $set: { lastReported: new Date() } 
+        }, 
+        { upsert: true }
+      );
+    }
+
+    res.json({ success: true, message: "Number blocked successfully" });
+
+  } catch (error) {
+    console.error("Block Error:", error.message);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 // 🧠 HELPER: Intelligent Name Update

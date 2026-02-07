@@ -21,13 +21,20 @@ export default function SaveContactScreen() {
   const [accounts, setAccounts] = useState<Contacts.Container[]>([]);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [permissionGranted, setPermissionGranted] = useState(false);
+
+  // Smart Back Logic
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/'); 
+    }
+  };
 
   useEffect(() => {
     (async () => {
       const { status } = await Contacts.requestPermissionsAsync();
       if (status === 'granted') {
-        setPermissionGranted(true);
         fetchAccounts();
       } else {
         Alert.alert("Permission Denied", "We need access to contacts to save this number.");
@@ -38,14 +45,12 @@ export default function SaveContactScreen() {
   const fetchAccounts = async () => {
     try {
       if (Platform.OS === 'android') {
-        // 🟢 FIX 1: Pass the query object but cast as 'any' to bypass the TS error
-        // The Android Native Module needs this, even if TypeScript definition complains.
+        // Fetch accounts (Google, Samsung, Device, etc.)
         const containers = await Contacts.getContainersAsync({
             contactType: Contacts.ContactTypes.Person
         } as any);
 
-        // 🟢 FIX 2: Remove 'c.contactType' check. 
-        // Just check the container name to determine if it's Google, Phone, etc.
+        // Filter for likely writable accounts
         const writableAccounts = containers.filter(c => 
            c.name.includes('@') || 
            c.name.toLowerCase().includes('phone') || 
@@ -56,7 +61,7 @@ export default function SaveContactScreen() {
 
         setAccounts(writableAccounts);
         
-        // Auto-select the first likely Google account, or fallback to the first available
+        // Auto-select the first likely Google account, or fallback
         const defaultAccount = writableAccounts.find(c => c.name.includes('gmail')) || writableAccounts[0];
         if (defaultAccount) setSelectedContainerId(defaultAccount.id);
       }
@@ -73,7 +78,6 @@ export default function SaveContactScreen() {
     setLoading(true);
 
     try {
-      // 🟢 FIX 3: Construct Contact Object with all required fields
       const contact: Contacts.Contact = {
         contactType: Contacts.ContactTypes.Person,
         name: `${firstName} ${lastName}`.trim(), 
@@ -90,17 +94,18 @@ export default function SaveContactScreen() {
       if (email) {
         contact[Contacts.Fields.Emails] = [{ 
             email, 
-            label: 'work',
+            label: 'work', 
             id: '2' 
         }];
       }
 
-      // Save to Account
+      // Save to Device
       const result = await Contacts.addContactAsync(contact, selectedContainerId || undefined);
 
       if (result) {
-        Alert.alert("Saved!", `Contact saved to your ${getSelectedAccountName()}.`);
-        router.back();
+        Alert.alert("Saved!", `Contact saved to your ${getSelectedAccountName()}.`, [
+            { text: "OK", onPress: handleBack }
+        ]);
       }
     } catch (error) {
       console.log(error);
@@ -118,7 +123,7 @@ export default function SaveContactScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={handleBack}>
           <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Add Contact</Text>

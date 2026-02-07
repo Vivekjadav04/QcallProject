@@ -4,11 +4,13 @@ import {
   ActivityIndicator, Alert, Dimensions, Linking, Platform 
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { API_BASE_URL } from '../../constants/config';
+
+// 🟢 1. Import Secure Ops
+import { useSecureOps } from '../../context/SecureOperationsContext';
 
 const { width } = Dimensions.get('window');
 
@@ -27,30 +29,41 @@ export default function ViewCallerProfileScreen() {
   const router = useRouter();
   const { number } = useLocalSearchParams();
   
+  // 🟢 2. Get the markAsSafe function from context
+  const { markAsSafe } = useSecureOps();
+
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [spamScore, setSpamScore] = useState(0);
+
+  // Smart Back Logic
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/'); 
+    }
+  };
 
   useEffect(() => {
     fetchProfileData();
   }, [number]);
 
+  // We keep this as-is since you said View Profile is working fine!
   const fetchProfileData = async () => {
     try {
-      // 🟢 API: This endpoint should handle the "Combination Logic" on the server
-      // (Check Users Table -> Check Contacts Table -> Check Spam Table)
-      const response = await fetch(`${API_BASE_URL}/api/profile/${number}`);
+      const response = await fetch(`${API_BASE_URL}/contacts/identify?number=${number}`);
       const data = await response.json();
       
-      if (response.ok) {
+      if (response.ok && data.found) {
         setProfile(data);
         setSpamScore(data.spamScore || 0);
       } else {
-        // Fallback for completely unknown numbers
         setProfile({ name: "Unknown Caller", isUnknown: true });
       }
     } catch (error) {
       console.log("Error fetching profile:", error);
+      setProfile({ name: "Unknown (Offline)", isUnknown: true });
     } finally {
       setLoading(false);
     }
@@ -79,24 +92,23 @@ export default function ViewCallerProfileScreen() {
     }
   };
 
-  const markAsSafe = async () => {
+  const handleMarkAsSafe = async () => {
+    const cleanNumber = Array.isArray(number) ? number[0] : number;
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert("Mark as Safe", "This decreases the spam score for this number. Are you sure?", [
       { text: "Cancel", style: "cancel" },
       { 
         text: "Yes, I Trust", 
         onPress: async () => {
-          try {
-            await fetch(`${API_BASE_URL}/api/report-not-spam`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ number }),
-            });
-            setSpamScore((prev) => Math.max(0, prev - 10)); // Optimistic Update
-            Alert.alert("Success", "Thanks! You helped improve our directory.");
-          } catch (e) {
-            Alert.alert("Error", "Could not submit report.");
-          }
+            // 🟢 3. Call the secure function
+            // The Context handles the Token & API securely
+            const success = await markAsSafe(cleanNumber);
+            
+            if (success) {
+                setSpamScore((prev) => Math.max(0, prev - 10)); // Optimistic Update
+                Alert.alert("Success", "Thanks! You helped improve our directory.");
+            }
         }
       }
     ]);
@@ -111,24 +123,24 @@ export default function ViewCallerProfileScreen() {
   }
 
   const isSpam = spamScore > 50;
-  const isVerified = profile?.isRegisteredUser; // True if they have a Qcall Account
+  const isVerified = profile?.isRegisteredUser; 
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         
-        {/* 1. Header Banner */}
+        {/* Header Banner */}
         <View style={styles.bannerContainer}>
           <LinearGradient
             colors={isSpam ? ['#7F1D1D', '#EF4444'] : ['#1E3A8A', '#3B82F6']}
             style={styles.banner}
           />
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
             <Feather name="arrow-left" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
 
-        {/* 2. Avatar & Main Info */}
+        {/* Avatar & Main Info */}
         <View style={styles.profileHeader}>
           <View style={[styles.avatarContainer, isSpam && { borderColor: THEME.danger }]}>
             {profile?.photo ? (
@@ -167,7 +179,7 @@ export default function ViewCallerProfileScreen() {
           </View>
         </View>
 
-        {/* 3. Spam Meter Section */}
+        {/* Spam Meter Section */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Reputation Score</Text>
@@ -188,14 +200,13 @@ export default function ViewCallerProfileScreen() {
               : "This number has a clean record in our database."}
           </Text>
 
-          {/* Feature: Decrease Spam Score */}
-          <TouchableOpacity style={styles.safeBtn} onPress={markAsSafe}>
+          <TouchableOpacity style={styles.safeBtn} onPress={handleMarkAsSafe}>
              <Feather name="thumbs-up" size={18} color={THEME.success} />
              <Text style={styles.safeBtnText}>I trust this number (Not Spam)</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 4. Action Grid (Material UI Style) */}
+        {/* Action Grid */}
         <View style={styles.gridContainer}>
           <TouchableOpacity style={styles.gridItem} onPress={() => handleAction('call')}>
             <View style={[styles.iconBox, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
@@ -226,7 +237,7 @@ export default function ViewCallerProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 5. Report Section */}
+        {/* Report Section */}
         <TouchableOpacity style={styles.reportBtn} onPress={() => handleAction('report')}>
           <Feather name="flag" size={20} color={THEME.subText} />
           <Text style={styles.reportText}>Report as Spam / Fraud</Text>
@@ -239,46 +250,32 @@ export default function ViewCallerProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.dark },
-  
-  // Header
   bannerContainer: { height: 160, width: '100%', position: 'relative' },
   banner: { flex: 1 },
   backBtn: { position: 'absolute', top: 50, left: 20, padding: 8, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 20 },
-  
-  // Profile Info
   profileHeader: { alignItems: 'center', marginTop: -60, paddingBottom: 20 },
   avatarContainer: { position: 'relative', marginBottom: 15 },
   avatar: { width: 120, height: 120, borderRadius: 60, borderWidth: 4, borderColor: THEME.dark, backgroundColor: '#334155' },
   placeholderAvatar: { justifyContent: 'center', alignItems: 'center' },
   verifiedBadge: { position: 'absolute', bottom: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 },
-  
   name: { fontSize: 28, fontWeight: '800', color: '#FFF', textAlign: 'center' },
   number: { fontSize: 18, color: THEME.subText, marginTop: 4, fontWeight: '500' },
-  
   badgesRow: { flexDirection: 'row', gap: 10, marginTop: 15 },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#334155', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   pillText: { fontSize: 12, fontWeight: '600', color: '#CBD5E1' },
-  
-  // Card
   card: { backgroundColor: THEME.card, marginHorizontal: 20, borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#334155' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   scoreText: { fontSize: 20, fontWeight: '800' },
-  
   progressBarBg: { height: 8, backgroundColor: '#334155', borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
   progressBarFill: { height: '100%', borderRadius: 4 },
   spamDesc: { color: THEME.subText, fontSize: 13, lineHeight: 20 },
-  
   safeBtn: { marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 14, backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
   safeBtnText: { color: THEME.success, fontWeight: '700', fontSize: 14 },
-  
-  // Grid Actions
   gridContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 30 },
   gridItem: { alignItems: 'center', width: width / 4.8 },
   iconBox: { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   gridLabel: { color: '#CBD5E1', fontSize: 12, fontWeight: '600' },
-  
-  // Bottom Report
   reportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 15, marginHorizontal: 40, borderTopWidth: 1, borderColor: '#334155' },
   reportText: { color: THEME.subText, fontWeight: '600' }
 });

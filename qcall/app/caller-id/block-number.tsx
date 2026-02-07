@@ -3,47 +3,50 @@ import { View, Text, TouchableOpacity, StyleSheet, Switch, ActivityIndicator, Al
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { API_BASE_URL } from '../../constants/config'; // Make sure this path is correct for you
+
+// 🟢 1. Import the new Secure Ops Hook
+import { useSecureOps } from '../../context/SecureOperationsContext';
 
 export default function BlockNumberScreen() {
   const router = useRouter();
   const { number } = useLocalSearchParams();
   
+  // 🟢 2. Get the blockNumber function from context
+  const { blockNumber } = useSecureOps();
+  
   const [loading, setLoading] = useState(false);
   const [alsoReport, setAlsoReport] = useState(true);
 
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+
   const handleBlock = async () => {
     setLoading(true);
-    try {
-      // 🟢 Connects to your backend
-      const response = await fetch(`${API_BASE_URL}/api/block-number`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          number: number,
-          alsoReportSpam: alsoReport
-        }),
-      });
 
-      if (response.ok) {
-        Alert.alert("Blocked", `${number} has been added to your block list.`);
-        router.replace('/(tabs)'); // Go back to home
-      } else {
-        const data = await response.json();
-        Alert.alert("Error", data.message || "Could not block number. Try again.");
-      }
-    } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Network request failed. Check internet.");
-    } finally {
-      setLoading(false);
+    // Ensure number is a string
+    const cleanNumber = Array.isArray(number) ? number[0] : number;
+
+    // 🟢 3. Call the secure function
+    // The Context handles the Token, API URL, and Errors automatically.
+    const success = await blockNumber(cleanNumber, alsoReport);
+
+    setLoading(false);
+
+    // 🟢 4. Handle Success UI
+    // If 'success' is false, the Context has already shown an error Alert.
+    if (success) {
+      Alert.alert("Blocked", `${cleanNumber} has been blocked.`, [
+        { text: "OK", onPress: handleBack }
+      ]);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={handleBack}>
           <Feather name="x" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Block Number</Text>

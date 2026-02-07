@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, SectionList, TouchableOpacity, Platform, 
   PermissionsAndroid, Image, TextInput, NativeModules, 
-  RefreshControl, Linking, Animated, Dimensions, Alert
+  RefreshControl, Linking, Animated, Dimensions, Easing
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; 
@@ -24,7 +24,9 @@ import { useCustomAlert } from '../../context/AlertContext';
 
 const { CallManagerModule } = NativeModules;
 const { width } = Dimensions.get('window');
-const INITIAL_LOAD_COUNT = 50; 
+
+// 🟢 CONFIGURATION
+const BATCH_SIZE = 40; // Load 40 items at a time
 
 const THEME = {
   colors: {
@@ -37,7 +39,7 @@ const THEME = {
     dangerBg: '#FEF2F2',
     success: '#10B981',
     border: '#E2E8F0',
-    tabBg: '#E2E8F0'
+    skeleton: '#E2E8F0' // Color for skeleton
   }
 };
 
@@ -56,6 +58,38 @@ const getDayLabel = (ts: number) => {
   const y = new Date(now); y.setDate(now.getDate() - 1);
   if (d.toDateString() === y.toDateString()) return 'Yesterday';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// --- 💀 SKELETON COMPONENT (The "Ghost" Loading Screen) ---
+const SkeletonCallLog = () => {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(animatedValue, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(animatedValue, { toValue: 0, duration: 1000, easing: Easing.linear, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+
+  const opacity = animatedValue.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.7] });
+
+  return (
+    <View style={styles.cardItem}>
+      {/* Avatar Skeleton */}
+      <Animated.View style={[styles.squircleAvatar, { backgroundColor: THEME.colors.skeleton, opacity }]} />
+      
+      {/* Text Skeleton */}
+      <View style={styles.cardContent}>
+        <Animated.View style={{ width: '60%', height: 16, backgroundColor: THEME.colors.skeleton, borderRadius: 4, marginBottom: 8, opacity }} />
+        <Animated.View style={{ width: '40%', height: 12, backgroundColor: THEME.colors.skeleton, borderRadius: 4, opacity }} />
+      </View>
+
+      {/* Button Skeleton */}
+      <Animated.View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: THEME.colors.skeleton, marginLeft: 10, opacity }} />
+    </View>
+  );
 };
 
 // --- HEADER COMPONENT ---
@@ -117,10 +151,11 @@ const AdCard = () => (
 
 const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
   const isMissed = item.type === 'missed';
+  // Simple fade in for new items
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, { 
-        toValue: 1, duration: 300, delay: index < 10 ? index * 40 : 0, useNativeDriver: true 
+        toValue: 1, duration: 400, useNativeDriver: true 
     }).start();
   }, []);
 
@@ -131,7 +166,7 @@ const CallLogItem = React.memo(({ item, index, onCallPress }: any) => {
   };
 
   return (
-    <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({inputRange:[0,1], outputRange:[20,0]}) }] }}>
+    <Animated.View style={{ opacity: anim }}>
       <TouchableOpacity style={styles.cardItem} activeOpacity={0.7} onPress={() => onCallPress(item.name, item.number)}>
         <View style={[styles.squircleAvatar, isMissed && styles.missedAvatarBg]}>
           {!item.imageUri ? (
@@ -177,7 +212,16 @@ export default function CallLogScreen() {
   const { showAlert } = useCustomAlert();
   
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
+  
+  // 🟢 Loading States
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // 🟢 Pagination State
+  const [displayLimit, setDisplayLimit] = useState(BATCH_SIZE);
+  const [hasMoreLogs, setHasMoreLogs] = useState(true);
+
   const [dialerVisible, setDialerVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [permissionGranted, setPermissionGranted] = useState(false);
@@ -192,18 +236,28 @@ export default function CallLogScreen() {
     initSync();
   }, []);
 
-  const loadData = async () => {
+  // 🟢 Optimized Load Function
+  const loadData = async (limit: number, isRefresh = false) => {
     try {
       if (Platform.OS === 'android') {
         const hasPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
         if (!hasPerm) {
           setPermissionGranted(false);
+          setIsInitialLoading(false);
           return; 
         }
       }
       setPermissionGranted(true);
 
-      const rawLogs = await CallLogs.load(INITIAL_LOAD_COUNT);
+      // Fetch logs with the current limit
+      const rawLogs = await CallLogs.load(limit);
+      
+      // If we got fewer logs than requested, we've reached the end
+      if (rawLogs.length < limit) {
+        setHasMoreLogs(false);
+      }
+
+      // Pre-fetch contacts only for numbers we have (optimization)
       const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image] });
       
       const newMap: any = {};
@@ -239,9 +293,14 @@ export default function CallLogScreen() {
       setMasterLogs(normalized);
     } catch (e) { 
       console.error("Log Error:", e); 
+    } finally {
+      setIsInitialLoading(false);
+      setIsLoadingMore(false);
+      if(isRefresh) setRefreshing(false);
     }
   };
 
+  // Initial Load
   useFocusEffect(
     useCallback(() => {
       const init = async () => {
@@ -249,24 +308,45 @@ export default function CallLogScreen() {
         if (Platform.OS === 'android') {
           const hasLogPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
           if (hasLogPerm) {
-             loadData();
+             // Reset limit on focus or keep? Let's reload current limit to be fresh
+             loadData(displayLimit);
           } else {
              setPermissionGranted(false);
+             setIsInitialLoading(false);
           }
         } else {
-          loadData();
+          loadData(displayLimit);
         }
       };
       init();
     }, [])
   );
 
+  // 🟢 Handle Refresh (Pull down)
+  const onRefresh = () => {
+    setRefreshing(true);
+    setDisplayLimit(BATCH_SIZE); // Reset pagination
+    setHasMoreLogs(true);
+    loadData(BATCH_SIZE, true);
+  };
+
+  // 🟢 Handle Load More (Scroll to bottom)
+  const onLoadMore = () => {
+    if (!isLoadingMore && hasMoreLogs && !refreshing && !searchText) {
+      setIsLoadingMore(true);
+      const newLimit = displayLimit + BATCH_SIZE;
+      setDisplayLimit(newLimit);
+      loadData(newLimit);
+    }
+  };
+
   const manualPermissionRequest = async () => {
     if (Platform.OS === 'android') {
        try {
          const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
          if (status === PermissionsAndroid.RESULTS.GRANTED) {
-           loadData();
+           setIsInitialLoading(true);
+           loadData(BATCH_SIZE);
          } else {
            showAlert("Permission Denied", "We cannot show your call history without permission.", "error");
          }
@@ -298,9 +378,14 @@ export default function CallLogScreen() {
   }, [router]);
 
   const sections = useMemo(() => {
-    if (!masterLogs.length) return [];
+    // If searching, filter existing logs (don't paginate search results for simplicity in this version)
     let result = masterLogs;
-    if (searchText) result = result.filter(log => log.number.includes(searchText) || (log.name && log.name.toLowerCase().includes(searchText.toLowerCase())));
+    if (searchText) {
+        result = result.filter(log => log.number.includes(searchText) || (log.name && log.name.toLowerCase().includes(searchText.toLowerCase())));
+    }
+    
+    if (!result.length && !isInitialLoading) return [];
+
     const groups: any = { 'Today': [], 'Yesterday': [] };
     const otherKeys: string[] = [];
     result.forEach(log => {
@@ -312,12 +397,40 @@ export default function CallLogScreen() {
             groups[label].push(log);
         }
     });
+
     return [
         { title: 'Today', data: groups['Today'] }, 
         { title: 'Yesterday', data: groups['Yesterday'] },
         ...otherKeys.map(k => ({ title: k, data: groups[k] }))
     ].filter(s => s.data && s.data.length > 0);
-  }, [masterLogs, searchText]);
+  }, [masterLogs, searchText, isInitialLoading]);
+
+  // 🟢 Render Logic for Empty/Loading States
+  const renderFooter = () => {
+    if (!isLoadingMore) return <View style={{ height: 100 }} />;
+    return (
+      <View style={{ paddingBottom: 100 }}>
+        <SkeletonCallLog />
+        <SkeletonCallLog />
+      </View>
+    );
+  };
+
+  // 🟢 Initial Skeleton Screen
+  if (isInitialLoading && masterLogs.length === 0) {
+    return (
+      <View style={styles.container}>
+         <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+           <HeaderComponent searchText={searchText} setSearchText={setSearchText} userPhoto={user?.profilePhoto} />
+           <AdCard />
+           <View style={{ paddingHorizontal: 20 }}>
+              <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Today</Text></View>
+              {[1, 2, 3, 4, 5, 6].map((k) => <SkeletonCallLog key={k} />)}
+           </View>
+         </SafeAreaView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -333,7 +446,7 @@ export default function CallLogScreen() {
         
         <AdCard />
 
-        {!permissionGranted && (
+        {!permissionGranted && !isInitialLoading && (
             <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>
                 <Feather name="alert-triangle" size={16} color="#DC2626" />
                 <Text style={styles.permErrorText}>Permission needed. Tap to enable.</Text>
@@ -348,8 +461,14 @@ export default function CallLogScreen() {
           renderSectionHeader={({ section: { title } }) => (
             <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text></View>
           )}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} tintColor={THEME.colors.primary} />}
+          contentContainerStyle={{ paddingBottom: insets.bottom }}
+          
+          // 🟢 Pagination Props
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.colors.primary} />}
+          onEndReached={onLoadMore}
+          onEndReachedThreshold={0.5} // Trigger when 50% from bottom
+          ListFooterComponent={renderFooter}
+          
           ListEmptyComponent={
              <View style={styles.emptyState}>
                 <Feather name="phone-off" size={40} color="#CBD5E1" />

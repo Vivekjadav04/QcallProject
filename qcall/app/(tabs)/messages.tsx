@@ -2,8 +2,8 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, FlatList, StyleSheet, PermissionsAndroid, Platform, 
   ActivityIndicator, TouchableOpacity, Modal, ScrollView, Switch,
-  Vibration, LayoutAnimation, UIManager, ToastAndroid, Image, TextInput
-  // ❌ REMOVED: Alert
+  Vibration, LayoutAnimation, UIManager, ToastAndroid, Image, TextInput,
+  Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -12,17 +12,34 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // @ts-ignore
 import SmsAndroid from 'react-native-get-sms-android';
 import { useRouter, useFocusEffect } from 'expo-router'; 
+import * as Contacts from 'expo-contacts';
 
 // 🟢 Services & Config
 import { useAuth } from '../../hooks/useAuth'; 
-
-// 🟢 IMPORT CUSTOM ALERT HOOK
 import { useCustomAlert } from '../../context/AlertContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// 🟢 Helper to get Random Light Color
+const getRandomLightColor = () => {
+  const lightColors = [
+    '#FDF4FF', // Light Pink
+    '#F0FDF4', // Light Lime/Green
+    '#FEFCE8', // Light Yellow
+    '#ECFEFF', // Light Cyan
+    '#F3F4F6', // Light Grey
+    '#FFF1F2', // Light Rose
+    '#F5F3FF', // Light Violet
+    '#FFF7ED', // Light Orange/Brown
+    '#EFF6FF', // Light Blue
+    '#FAFAF9', // Warm Stone
+  ];
+  return lightColors[Math.floor(Math.random() * lightColors.length)];
+};
+
+// 🟢 Message Interface
 interface SmsMessage {
   _id: string; 
   address: string;
@@ -30,26 +47,56 @@ interface SmsMessage {
   date: number;
 }
 
+// 🟢 Contact Interface
+interface ContactInfo {
+  name: string;
+  imageUri?: string;
+}
+
 const PAGE_SIZE = 50; 
 
+// 🟢 Premium Theme Palette
 const THEME = {
   colors: {
-    bg: '#F8FAFC',
+    bg: '#F8FAFC', // Slate 50
     card: '#FFFFFF',
-    primary: '#0F172A',
+    primary: '#0F172A', // Slate 900
+    accent: '#3B82F6', // Blue 500
     textMain: '#1E293B',
     textSub: '#64748B',
     danger: '#EF4444',
     success: '#10B981',
+    gold: '#F59E0B', 
     border: '#E2E8F0',
-    searchBarBg: '#FFFFFF', // Updated to match other tabs
+    skeleton: '#E2E8F0', 
   }
 };
 
-// --- HEADER COMPONENT (Standardized) ---
+// --- SKELETON LOADER ---
+const SkeletonItem = () => {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+  return (
+    <View style={styles.itemContainer}>
+      <Animated.View style={[styles.avatar, { backgroundColor: THEME.colors.skeleton, opacity }]} />
+      <View style={styles.contentColumn}>
+        <Animated.View style={{ width: '60%', height: 16, backgroundColor: THEME.colors.skeleton, marginBottom: 8, borderRadius: 4, opacity }} />
+        <Animated.View style={{ width: '90%', height: 12, backgroundColor: THEME.colors.skeleton, borderRadius: 4, opacity }} />
+      </View>
+    </View>
+  );
+};
+
+// --- HEADER COMPONENT ---
 const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
   return (
     <View style={styles.headerWrapper}>
       <View style={styles.topRow}>
@@ -62,7 +109,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
              <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
            ) : (
              <View style={styles.avatarPlaceholder}>
-                <Feather name="user" size={20} color="#FFF" />
+                <Feather name="user" size={24} color="#FFF" />
              </View>
            )}
         </TouchableOpacity>
@@ -70,14 +117,14 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
       <View style={styles.searchBlock}>
         <Feather name="search" size={18} color={THEME.colors.textSub} />
         <TextInput 
-          placeholder="Search messages..." 
+          placeholder="Search conversations..." 
           placeholderTextColor={THEME.colors.textSub} 
           style={styles.searchInput}
           value={searchText}
           onChangeText={setSearchText} 
         />
         <TouchableOpacity style={styles.filterIcon}>
-            <MaterialCommunityIcons name="qrcode-scan" size={20} color={THEME.colors.primary} />
+            <MaterialCommunityIcons name="tune-vertical" size={20} color={THEME.colors.primary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -86,11 +133,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
 
 export default function MessageScreen() {
   const router = useRouter(); 
-  
-  // 🟢 Use Redux Hook
   const { user } = useAuth();
-  
-  // 🟢 HOOK THE ALERT SYSTEM
   const { showAlert } = useCustomAlert();
 
   const [messages, setMessages] = useState<SmsMessage[]>([]);
@@ -103,64 +146,92 @@ export default function MessageScreen() {
   const [showPinned, setShowPinned] = useState(true);
   const [searchText, setSearchText] = useState(''); 
 
+  const [contactMap, setContactMap] = useState<Map<string, ContactInfo>>(new Map());
+  
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<SmsMessage | null>(null);
+  
+  // 🟢 NEW: State for Dynamic Modal Color
+  const [modalBgColor, setModalBgColor] = useState('#FFFFFF');
 
-  // Tab-Specific Permission Check
   useFocusEffect(
     useCallback(() => {
       const checkAndLoad = async () => {
         if (Platform.OS === 'android') {
-          const hasPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
-          if (hasPermission) {
+          const hasSmsPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
+          if (hasSmsPermission) {
+            const { status } = await Contacts.requestPermissionsAsync();
+            if (status === 'granted') await loadContacts();
             fetchMessages(0);
           } else {
             const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS);
             if (status === PermissionsAndroid.RESULTS.GRANTED) {
+              const { status: contactStatus } = await Contacts.requestPermissionsAsync();
+              if (contactStatus === 'granted') await loadContacts();
               fetchMessages(0);
             } else {
               setLoading(false);
-              // 🔴 ERROR ALERT
-              showAlert("Permission Denied", "We need SMS permission to display your messages.", "error");
+              showAlert("Permission Denied", "SMS permission is required.", "error");
             }
           }
         } else {
           setLoading(false);
-          // 🟠 IOS WARNING
-          showAlert("Not Supported", "SMS reading is not supported on iOS.", "warning");
+          showAlert("Not Supported", "iOS does not support raw SMS reading.", "warning");
         }
       };
-
       loadPinnedMessages();
       checkAndLoad();
     }, [])
   );
 
+  const loadContacts = async () => {
+    try {
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Image],
+      });
+      const map = new Map<string, ContactInfo>();
+      
+      if (data.length > 0) {
+        data.forEach(contact => {
+          if (contact.phoneNumbers) {
+            contact.phoneNumbers.forEach(phone => {
+              if (phone.number) {
+                const cleanNumber = phone.number.replace(/\D/g, '').slice(-10); 
+                map.set(cleanNumber, {
+                    name: contact.name,
+                    imageUri: contact.imageAvailable ? contact.image?.uri : undefined
+                });
+              }
+            });
+          }
+        });
+      }
+      setContactMap(map);
+    } catch (e) { console.log("Contacts Error", e); }
+  };
+
   const loadPinnedMessages = async () => {
     try {
       const storedIds = await AsyncStorage.getItem('pinned_msgs');
       if (storedIds) setPinnedIds(JSON.parse(storedIds));
-    } catch (e) { console.log("Error loading pins", e); }
+    } catch (e) { console.log("Error pins", e); }
   };
 
-  const togglePin = async (msgId: string) => {
-    const idString = String(msgId);
-    Vibration.vibrate(50); 
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const getCategory = (msg: SmsMessage, cleanNumber: string): string => {
+    if (contactMap.has(cleanNumber)) return 'Private';
 
-    let newPinned = [...pinnedIds];
-    const isPinning = !newPinned.includes(idString);
+    const body = msg.body.toLowerCase();
+    const sender = msg.address.toLowerCase();
+    const isNumericSender = /^[0-9+]+$/.test(sender.replace('-', ''));
 
-    if (!isPinning) {
-      newPinned = newPinned.filter(id => id !== idString); 
-      ToastAndroid.show("Unpinned", ToastAndroid.SHORT);
-    } else {
-      newPinned.push(idString); 
-      ToastAndroid.show("Pinned to Top", ToastAndroid.SHORT);
-    }
+    if (body.includes('otp') || body.includes('code') || body.includes('password')) return 'OTP';
+    if (body.includes('offer') || body.includes('sale') || body.includes('win') || body.includes('congrats')) return 'Spam';
+    
+    if (!isNumericSender && (sender.includes('-') || sender.length <= 9)) return 'Promotion';
+    
+    if (isNumericSender && sender.length >= 10) return 'Private'; 
 
-    setPinnedIds(newPinned);
-    await AsyncStorage.setItem('pinned_msgs', JSON.stringify(newPinned));
+    return 'All';
   };
 
   const fetchMessages = (startIndex: number) => {
@@ -174,9 +245,9 @@ export default function MessageScreen() {
       (fail: string) => { setLoading(false); setLoadingMore(false); },
       (count: number, smsList: string) => {
         try {
-          const newBatch = JSON.parse(smsList);
-          if (startIndex === 0) setMessages(newBatch);
-          else setMessages(prev => [...prev, ...newBatch]);
+          const rawBatch = JSON.parse(smsList);
+          if (startIndex === 0) setMessages(rawBatch);
+          else setMessages(prev => [...prev, ...rawBatch]);
           setCurrentCount(startIndex + PAGE_SIZE);
         } catch (e) { console.log(e); } 
         finally { setLoading(false); setLoadingMore(false); }
@@ -185,134 +256,150 @@ export default function MessageScreen() {
   };
 
   const loadMoreMessages = () => {
-    if (!loadingMore && !loading && messages.length >= PAGE_SIZE) {
-      fetchMessages(currentCount);
+    if (!loadingMore && !loading && messages.length >= PAGE_SIZE) fetchMessages(currentCount);
+  };
+
+  const togglePin = async (msgId: string) => {
+    const idString = String(msgId);
+    Vibration.vibrate(50); 
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    let newPinned = [...pinnedIds];
+    if (newPinned.includes(idString)) {
+      newPinned = newPinned.filter(id => id !== idString);
+      ToastAndroid.show("Unpinned", ToastAndroid.SHORT);
+    } else {
+      newPinned.push(idString);
+      ToastAndroid.show("Pinned", ToastAndroid.SHORT);
     }
+    setPinnedIds(newPinned);
+    await AsyncStorage.setItem('pinned_msgs', JSON.stringify(newPinned));
   };
 
   const { pinnedList, regularList } = useMemo(() => {
-    const pinned: SmsMessage[] = [];
-    const regular: SmsMessage[] = [];
+    const pinned: any[] = [];
+    const regular: any[] = [];
     const lowerSearch = searchText.toLowerCase();
 
     messages.forEach(msg => {
-      const address = msg.address || '';
-      const body = msg.body || '';
-      const matchesSearch = address.toLowerCase().includes(lowerSearch) || body.toLowerCase().includes(lowerSearch);
+      const cleanAddr = msg.address.replace(/\D/g, '').slice(-10);
+      
+      const contactInfo = contactMap.get(cleanAddr);
+      const displayName = contactInfo?.name ?? msg.address;
+      const displayImage = contactInfo?.imageUri;
+      
+      const category = getCategory(msg, cleanAddr);
 
+      const matchesSearch = 
+        displayName.toLowerCase().includes(lowerSearch) || 
+        msg.body.toLowerCase().includes(lowerSearch);
+        
       if (!matchesSearch) return;
 
-      if (pinnedIds.includes(String(msg._id))) {
-        pinned.push(msg);
-      } else {
-        regular.push(msg);
+      if (selectedCategory !== 'All' && category !== selectedCategory) {
+          return;
       }
+
+      const processedMsg = { ...msg, displayName, displayImage, category, cleanAddr };
+
+      if (pinnedIds.includes(String(msg._id))) pinned.push(processedMsg);
+      else regular.push(processedMsg);
     });
 
     return { pinnedList: pinned, regularList: regular };
-  }, [messages, pinnedIds, searchText]); 
+  }, [messages, pinnedIds, searchText, selectedCategory, contactMap]); 
 
-  const getAvatarColor = (letter: string) => {
-    const colors = ['#E3F2FD', '#F3E5F5', '#E8F5E9', '#FFF3E0', '#FFEBEE', '#E0F7FA', '#FCE4EC', '#F1F8E9'];
-    const index = letter.charCodeAt(0) % colors.length;
-    return colors[index];
+  // 🟢 VISUALS: Premium Avatars with Images
+  const renderAvatar = (name: string, category: string, imageUri?: string) => {
+    
+    if (imageUri) {
+        return (
+            <Image source={{ uri: imageUri }} style={[styles.avatar, styles.realImage]} />
+        );
+    }
+
+    if (category === 'Private' && !/^[0-9+]+$/.test(name)) {
+        return (
+            <View style={[styles.avatar, { backgroundColor: '#CCFBF1', borderWidth: 1, borderColor: '#2DD4BF' }]}>
+                <Text style={[styles.avatarText, { color: '#0F766E' }]}>{name.charAt(0).toUpperCase()}</Text>
+                <View style={styles.savedBadge} />
+            </View>
+        );
+    }
+
+    if (category === 'OTP') {
+        return (
+            <View style={[styles.avatar, { backgroundColor: '#EFF6FF' }]}>
+                <MaterialCommunityIcons name="shield-check-outline" size={22} color="#2563EB" />
+            </View>
+        );
+    }
+
+    if (category === 'Promotion') {
+        return (
+            <View style={[styles.avatar, { backgroundColor: '#FAF5FF' }]}>
+                <Feather name="shopping-bag" size={20} color="#9333EA" />
+            </View>
+        );
+    }
+
+    if (category === 'Spam') {
+        return (
+            <View style={[styles.avatar, { backgroundColor: '#FEF2F2' }]}>
+                <Feather name="alert-triangle" size={20} color="#DC2626" />
+            </View>
+        );
+    }
+
+    const bgColors = ['#F3F4F6', '#F0FDF4', '#FFF7ED', '#FDF4FF'];
+    const textColors = ['#4B5563', '#16A34A', '#EA580C', '#C026D3'];
+    const idx = name.length % bgColors.length;
+
+    return (
+        <View style={[styles.avatar, { backgroundColor: bgColors[idx] }]}>
+            <Text style={[styles.avatarText, { color: textColors[idx] }]}>{name.charAt(0).toUpperCase()}</Text>
+        </View>
+    );
   };
 
-  const renderMessageItem = ({ item, isPinned }: { item: SmsMessage, isPinned?: boolean }) => {
-    const itemIdString = String(item._id);
-    const address = item.address || 'Unknown';
-    const isNumber = !isNaN(Number(address.replace('+', ''))); 
-    const isBank = address.toLowerCase().includes('bk') || address.toLowerCase().includes('bank');
-    const senderLetter = isNumber ? '#' : address.charAt(0).toUpperCase();
-    const avatarColor = getAvatarColor(senderLetter);
-
+  const renderMessageItem = ({ item }: { item: any }) => {
     const dateObj = new Date(item.date);
     const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
+    const isPinned = pinnedIds.includes(String(item._id));
+
     return (
       <TouchableOpacity 
         style={[styles.itemContainer, isPinned && styles.pinnedItemContainer]} 
-        onPress={() => { setSelectedMessage(item); setModalVisible(true); }}
-        activeOpacity={0.7}
+        onPress={() => { 
+            // 🟢 GENERATE NEW COLOR ON TAP
+            const newColor = getRandomLightColor();
+            setModalBgColor(newColor);
+            
+            setSelectedMessage(item); 
+            setModalVisible(true); 
+        }}
+        activeOpacity={0.6}
       >
-        <View style={[styles.avatar, { backgroundColor: isNumber ? '#F1F5F9' : avatarColor }]}>
-           {isBank ? (
-             <MaterialCommunityIcons name="bank" size={22} color="#64748B" />
-           ) : isNumber ? (
-             <Ionicons name="person" size={22} color="#94A3B8" />
-           ) : (
-             <Text style={styles.avatarText}>{senderLetter}</Text>
-           )}
-        </View>
+        {renderAvatar(item.displayName, item.category, item.displayImage)}
 
         <View style={styles.contentColumn}>
-          <Text style={styles.senderName} numberOfLines={1}>{item.address}</Text>
-          <Text style={styles.messagePreview} numberOfLines={1}>
-            {item.body.replace(/\n/g, ' ')}
+          <View style={styles.nameRow}>
+             <Text style={styles.senderName} numberOfLines={1}>{item.displayName}</Text>
+             {isPinned && <MaterialCommunityIcons name="pin" size={14} color={THEME.colors.primary} style={{marginLeft: 6, transform: [{rotate: '-45deg'}]}} />}
+          </View>
+          <Text style={styles.messagePreview} numberOfLines={2}>
+            {item.body}
           </Text>
         </View>
 
         <View style={styles.metaColumn}>
            <Text style={styles.dateText}>{timeString}</Text>
-           <View style={styles.actionsRow}>
-             <TouchableOpacity 
-                 onPress={() => togglePin(itemIdString)}
-                 hitSlop={{top:10, bottom:10, left:10, right:10}}
-                 style={styles.pinTapArea}
-             >
-                 <MaterialCommunityIcons 
-                   name={isPinned ? "pin" : "pin-outline"} 
-                   size={18} 
-                   color={isPinned ? THEME.colors.primary : "#B0B0B0"} 
-                   style={isPinned ? {transform: [{rotate: '-45deg'}]} : {}}
-                 />
-             </TouchableOpacity>
-             <View style={styles.simBadge}>
-                 <Text style={styles.simText}>1</Text>
-             </View>
-           </View>
+           <TouchableOpacity onPress={() => togglePin(item._id)} style={{padding: 4}}>
+              <Feather name="more-horizontal" size={18} color="#CBD5E1" />
+           </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
   };
-
-  const ListHeader = () => (
-    <View style={{ backgroundColor: THEME.colors.bg }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catContainer}>
-         {['All', 'Private', 'Promotion', 'Spam'].map((cat) => (
-             <TouchableOpacity 
-               key={cat} 
-               style={[styles.catPill, selectedCategory === cat && styles.catPillActive]}
-               onPress={() => setSelectedCategory(cat)}
-             >
-                <Text style={[styles.catText, selectedCategory === cat && styles.catTextActive]}>{cat}</Text>
-             </TouchableOpacity>
-         ))}
-      </ScrollView>
-
-      {pinnedList.length > 0 && (
-          <View style={styles.sectionHeaderRow}>
-             <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <MaterialCommunityIcons name="pin" size={14} color={THEME.colors.primary} style={{transform: [{rotate: '-45deg'}]}} />
-                <Text style={styles.sectionTitle}> Pinned</Text>
-             </View>
-             <Switch 
-               value={showPinned} 
-               onValueChange={setShowPinned}
-               trackColor={{ false: "#E0E0E0", true: "#BBDEFB" }}
-               thumbColor={showPinned ? THEME.colors.primary : "#f4f3f4"}
-               style={{ transform: [{ scaleX: .8 }, { scaleY: .8 }] }}
-             />
-          </View>
-      )}
-
-      {showPinned && pinnedList.map(msg => (
-         <View key={String(msg._id)}>{renderMessageItem({ item: msg, isPinned: true })}</View>
-      ))}
-
-      {pinnedList.length > 0 && showPinned && <View style={styles.divider} />}
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -325,52 +412,67 @@ export default function MessageScreen() {
         userPhoto={user?.profilePhoto}
       />
 
+      <View style={{backgroundColor: THEME.colors.bg, zIndex: 10}}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catContainer}>
+            {['All', 'Private', 'OTP', 'Promotion', 'Spam'].map((cat) => (
+                <TouchableOpacity 
+                key={cat} 
+                style={[styles.catPill, selectedCategory === cat && styles.catPillActive]}
+                onPress={() => setSelectedCategory(cat)}
+                >
+                    <Text style={[styles.catText, selectedCategory === cat && styles.catTextActive]}>{cat}</Text>
+                </TouchableOpacity>
+            ))}
+        </ScrollView>
+      </View>
+
       {loading ? (
-        <ActivityIndicator size="large" color={THEME.colors.primary} style={{marginTop: 50}} />
+        <View style={{marginTop: 10}}>
+           {[1, 2, 3, 4, 5, 6].map(i => <SkeletonItem key={i} />)}
+        </View>
       ) : (
         <FlatList
-          data={regularList}
+          data={[...pinnedList, ...regularList]}
           keyExtractor={(item) => String(item._id)} 
-          renderItem={(props) => renderMessageItem({ ...props, isPinned: false })}
-          ListHeaderComponent={ListHeader}
+          renderItem={renderMessageItem}
           onEndReached={loadMoreMessages}
           onEndReachedThreshold={0.5} 
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
           keyboardShouldPersistTaps="handled"
         />
       )}
 
       <TouchableOpacity style={styles.fab}>
-          <MaterialCommunityIcons name="message-plus-outline" size={20} color="#fff" />
-          <Text style={styles.fabText}>New Chat</Text>
+          <View style={styles.fabIcon}>
+             <MaterialCommunityIcons name="pencil-outline" size={24} color="#FFF" />
+          </View>
+          <Text style={styles.fabText}>Compose</Text>
       </TouchableOpacity>
 
+      {/* 🟢 DYNAMIC FULL-SCREEN MODAL */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
-           <View style={styles.modalHeader}>
-             <TouchableOpacity onPress={() => setModalVisible(false)}>
-               <Ionicons name="arrow-back" size={24} color="#000" />
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: modalBgColor }]}>
+           
+           {/* Header with Dynamic Color */}
+           <View style={[styles.modalHeader, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+             <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.backBtn}>
+               <Ionicons name="chevron-back" size={24} color={THEME.colors.primary} />
              </TouchableOpacity>
-             <Text style={styles.modalTitle}>Details</Text>
-             <View style={{width: 24}} /> 
+             <Text style={styles.modalTitle} numberOfLines={1}>
+                {selectedMessage ? (selectedMessage as any).displayName : 'Message'}
+             </Text>
+             <View style={{width: 40}} /> 
            </View>
 
            {selectedMessage && (
-             <ScrollView style={{padding: 20}}>
-                <View style={styles.modalAvatarContainer}>
-                   <View style={[styles.bigAvatar, { backgroundColor: '#E3F2FD' }]}>
-                      <Text style={styles.bigAvatarText}>{selectedMessage.address.charAt(0)}</Text>
-                   </View>
-                   <Text style={styles.modalSender}>{selectedMessage.address}</Text>
-                   <Text style={styles.modalDate}>{new Date(selectedMessage.date).toLocaleString()}</Text>
-                </View>
-
+             <ScrollView style={{padding: 24}}>
                 <View style={styles.messageBubble}>
-                   <Text style={{fontSize: 16, lineHeight: 24, color: '#333'}}>{selectedMessage.body}</Text>
+                   <Text style={styles.messageBody}>{selectedMessage.body}</Text>
+                   <Text style={styles.messageTime}>{new Date(selectedMessage.date).toLocaleString()}</Text>
                 </View>
              </ScrollView>
            )}
@@ -384,54 +486,55 @@ export default function MessageScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: THEME.colors.bg },
   
-  // Standardized Header
-  headerWrapper: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '600', textTransform: 'uppercase' },
-  headerTitle: { fontSize: 32, fontWeight: '800', color: THEME.colors.textMain, letterSpacing: -1 },
-  profileBtn: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  avatarImage: { width: 44, height: 44, borderRadius: 16, borderWidth: 2, borderColor: '#FFF' },
-  avatarPlaceholder: { width: 44, height: 44, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  // Header
+  headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  headerTitle: { fontSize: 34, fontWeight: '900', color: THEME.colors.primary, letterSpacing: -1 },
+  profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
+  avatarImage: { width: 48, height: 48, borderRadius: 18, borderWidth: 2, borderColor: '#FFF' },
+  avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   
-  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 48, borderRadius: 16, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5 },
+  // Search
+  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
-  filterIcon: { padding: 4 },
+  filterIcon: { padding: 8, backgroundColor: '#F8FAFC', borderRadius: 12 },
 
-  // Content Styles
-  catContainer: { paddingHorizontal: 20, paddingVertical: 12 },
-  catPill: { backgroundColor: '#F1F5F9', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  catPillActive: { backgroundColor: '#E0F2FE', borderColor: THEME.colors.primary },
-  catText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
-  catTextActive: { color: THEME.colors.primary },
+  // Categories
+  catContainer: { paddingHorizontal: 24, paddingVertical: 12 },
+  catPill: { backgroundColor: '#FFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24, marginRight: 10, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 2 },
+  catPillActive: { backgroundColor: THEME.colors.primary, borderColor: THEME.colors.primary },
+  catText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
+  catTextActive: { color: '#FFF' },
   
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: THEME.colors.primary, marginLeft: 6 },
-  divider: { height: 1, backgroundColor: '#E2E8F0', marginHorizontal: 20, marginVertical: 5 },
-  
-  itemContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14, alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F8F9FA' },
+  // List Item
+  itemContainer: { flexDirection: 'row', paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   pinnedItemContainer: { backgroundColor: '#F8FAFC' },
-  avatar: { width: 46, height: 46, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  avatarText: { fontSize: 20, fontWeight: '700', color: '#444' },
-  contentColumn: { flex: 1, justifyContent: 'center', marginRight: 8 },
-  senderName: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain, marginBottom: 4 },
-  messagePreview: { fontSize: 13, color: THEME.colors.textSub, lineHeight: 18 },
-  metaColumn: { alignItems: 'flex-end', justifyContent: 'space-between', height: 42 },
-  dateText: { fontSize: 11, color: '#94A3B8', fontWeight: '500', marginBottom: 4 },
-  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pinTapArea: { padding: 4 },
-  simBadge: { backgroundColor: '#F1F5F9', width: 16, height: 16, borderRadius: 4, justifyContent: 'center', alignItems: 'center' },
-  simText: { color: '#94A3B8', fontSize: 10, fontWeight: 'bold' },
   
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: THEME.colors.primary, flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 30, elevation: 6, shadowColor: THEME.colors.primary, shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3 },
-  fabText: { color: '#fff', fontWeight: 'bold', fontSize: 15, marginLeft: 8 },
+  avatar: { width: 52, height: 52, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  realImage: { borderWidth: 1, borderColor: '#E2E8F0' },
+  avatarText: { fontSize: 20, fontWeight: '800' },
+  savedBadge: { width: 12, height: 12, backgroundColor: '#10B981', position: 'absolute', bottom: -2, right: -2, borderRadius: 6, borderWidth: 2, borderColor: '#FFF' },
   
-  modalContainer: { flex: 1, backgroundColor: '#fff' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderColor: '#eee' },
-  modalTitle: { fontSize: 18, fontWeight: 'bold' },
-  modalAvatarContainer: { alignItems: 'center', marginBottom: 20 },
-  bigAvatar: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  bigAvatarText: { fontSize: 28, fontWeight: 'bold', color: THEME.colors.primary },
-  modalSender: { fontSize: 22, fontWeight: 'bold', color: '#000', marginBottom: 5 },
-  modalDate: { fontSize: 14, color: '#666' },
-  messageBubble: { backgroundColor: '#F1F5F9', padding: 20, borderRadius: 16, marginTop: 10 },
+  contentColumn: { flex: 1, justifyContent: 'center', marginRight: 12 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  senderName: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain },
+  messagePreview: { fontSize: 14, color: THEME.colors.textSub, lineHeight: 20, fontWeight: '400' },
+  
+  metaColumn: { alignItems: 'flex-end', justifyContent: 'space-between', height: 44 },
+  dateText: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  
+  fab: { position: 'absolute', bottom: 95, right: 24, backgroundColor: THEME.colors.primary, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 32, elevation: 8, shadowColor: THEME.colors.primary, shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.25 },
+  fabIcon: { marginRight: 8 },
+  fabText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  
+  // Modal (Dynamic Colors applied inline)
+  modalContainer: { flex: 1 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1 },
+  backBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: THEME.colors.primary, flex: 1, textAlign: 'center' },
+  
+  messageBubble: { backgroundColor: 'rgba(255,255,255,0.7)', padding: 24, borderRadius: 24, borderTopLeftRadius: 4, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  messageBody: { fontSize: 17, lineHeight: 26, color: '#334155', fontWeight: '400' },
+  messageTime: { marginTop: 16, fontSize: 12, color: '#64748B', fontWeight: '600', textAlign: 'right' },
 });

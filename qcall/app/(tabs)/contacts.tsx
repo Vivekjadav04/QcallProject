@@ -2,8 +2,8 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
   SectionList, Vibration, LayoutAnimation, Platform, UIManager,
-  ToastAndroid, TextInput, GestureResponderEvent, RefreshControl, NativeModules
-  // ❌ REMOVED: Alert
+  ToastAndroid, TextInput, GestureResponderEvent, RefreshControl, NativeModules,
+  Animated, Easing
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,9 +14,7 @@ import sectionListGetItemLayout from 'react-native-section-list-get-item-layout'
 import { useRouter, useFocusEffect } from 'expo-router'; 
 
 // 🟢 Services & Config
-import { useAuth } from '../../hooks/useAuth'; // Standardized Hook
-
-// 🟢 IMPORT CUSTOM ALERT HOOK
+import { useAuth } from '../../hooks/useAuth'; 
 import { useCustomAlert } from '../../context/AlertContext';
 
 const { CallManagerModule } = NativeModules;
@@ -25,6 +23,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// 🟢 Premium Theme
 const THEME = {
   colors: {
     bg: '#F8FAFC',
@@ -32,16 +31,77 @@ const THEME = {
     primary: '#0F172A',
     textMain: '#1E293B',
     textSub: '#64748B',
+    accent: '#0F766E', 
+    accentBg: '#CCFBF1',
     danger: '#EF4444',
-    success: '#10B981',
     border: '#E2E8F0',
-    headerBg: '#F8FAFC' // Matches Call Log bg
+    skeleton: '#E2E8F0',
+    gold: '#F59E0B',
   }
 };
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-// --- HEADER COMPONENT (Standardized) ---
+// 🟢 Helper to generate consistent pastel colors based on name string
+const getAvatarStyle = (name: string) => {
+  const bgColors = [
+    '#F3F4F6', // Grey
+    '#ECFEFF', // Cyan
+    '#F0FDF4', // Green
+    '#FFF7ED', // Orange
+    '#FEF2F2', // Red
+    '#F5F3FF', // Violet
+    '#EFF6FF', // Blue
+    '#FFFBEB', // Yellow
+  ];
+  const textColors = [
+    '#374151', // Grey Text
+    '#0E7490', // Cyan Text
+    '#15803D', // Green Text
+    '#C2410C', // Orange Text
+    '#B91C1C', // Red Text
+    '#7C3AED', // Violet Text
+    '#1D4ED8', // Blue Text
+    '#B45309', // Yellow Text
+  ];
+  
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  const index = Math.abs(hash) % bgColors.length;
+  
+  return {
+    backgroundColor: bgColors[index],
+    color: textColors[index]
+  };
+};
+
+// --- SKELETON COMPONENT ---
+const SkeletonContact = () => {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <View style={styles.row}>
+      <Animated.View style={[styles.skeletonAvatar, { opacity }]} />
+      <View style={styles.info}>
+        <Animated.View style={[styles.skeletonText, { width: '50%', height: 16, marginBottom: 6, opacity }]} />
+        <Animated.View style={[styles.skeletonText, { width: '30%', height: 12, opacity }]} />
+      </View>
+    </View>
+  );
+};
+
+// --- HEADER COMPONENT ---
 const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -57,7 +117,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
              <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
            ) : (
              <View style={styles.avatarPlaceholder}>
-                <Feather name="user" size={20} color="#FFF" />
+                <Feather name="user" size={24} color="#FFF" />
              </View>
            )}
         </TouchableOpacity>
@@ -72,7 +132,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
           onChangeText={setSearchText} 
         />
         <TouchableOpacity style={styles.filterIcon}>
-            <MaterialCommunityIcons name="qrcode-scan" size={20} color={THEME.colors.primary} />
+            <MaterialCommunityIcons name="sort-alphabetical-variant" size={22} color={THEME.colors.primary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -82,24 +142,20 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
 export default function ContactsScreen() {
   const router = useRouter(); 
   const insets = useSafeAreaInsets();
-  
-  // 🟢 Use Redux Hook
   const { user } = useAuth();
-  
-  // 🟢 HOOK THE ALERT SYSTEM
   const { showAlert } = useCustomAlert();
 
   const [allContacts, setAllContacts] = useState<any[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false); 
+  const [loading, setLoading] = useState(true); 
   const [permissionGranted, setPermissionGranted] = useState(true);
   const [search, setSearch] = useState('');
   const [myNumber, setMyNumber] = useState('+91 00000 00000'); 
   const [sidebarHeight, setSidebarHeight] = useState(0);
+  
   const lastScrolledLetter = useRef<string | null>(null);
   const sectionListRef = useRef<SectionList>(null);
 
-  // Optimized Permission & Data Fetching
   useFocusEffect(
     useCallback(() => {
       const checkAndLoad = async () => {
@@ -107,9 +163,7 @@ export default function ContactsScreen() {
         
         if (status === 'granted') {
           setPermissionGranted(true);
-          if (allContacts.length === 0) {
-            loadContacts();
-          }
+          if (allContacts.length === 0) loadContacts();
         } else {
           const { status: newStatus } = await Contacts.requestPermissionsAsync();
           if (newStatus === 'granted') {
@@ -117,6 +171,7 @@ export default function ContactsScreen() {
             loadContacts();
           } else {
             setPermissionGranted(false);
+            setLoading(false);
           }
         }
       };
@@ -124,7 +179,7 @@ export default function ContactsScreen() {
       loadUserData(); 
       loadFavorites();
       checkAndLoad();
-    }, [allContacts.length])
+    }, []) 
   );
 
   const loadUserData = async () => {
@@ -157,8 +212,6 @@ export default function ContactsScreen() {
   };
 
   const loadContacts = async () => {
-    if (loading) return; 
-
     try {
       setLoading(true);
       const { data } = await Contacts.getContactsAsync({ 
@@ -194,23 +247,19 @@ export default function ContactsScreen() {
         await Contacts.presentFormAsync(null);
         setTimeout(loadContacts, 2000);
       } else {
-        // 🔴 ERROR ALERT
         showAlert("Permission Denied", "We cannot access contacts to add a new one.", "error");
       }
     } catch (e) { console.log(e); }
   };
 
-  // 🟢 NATIVE CALL FUNCTION
   const handleNativeCall = async (rawNumber: string) => {
     if (!rawNumber) return;
     const cleanNumber = rawNumber.replace(/[^\d+]/g, '');
 
     if (Platform.OS === 'android') {
         try {
-            // Check if we are default dialer
             const isDefault = await CallManagerModule.checkIsDefaultDialer();
             if (!isDefault) {
-                // 🟠 WARNING ALERT
                 showAlert(
                     "Default Dialer Required",
                     "To make calls directly, please set QCall as your default phone app.",
@@ -219,14 +268,11 @@ export default function ContactsScreen() {
                 );
                 return;
             }
-            // Trigger Native Call
             CallManagerModule.startCall(cleanNumber);
         } catch (e) {
-            // 🔴 ERROR ALERT
             showAlert("Error", "Could not initiate call.", "error");
         }
     } else {
-        // 🟠 WARNING ALERT
         showAlert("Not Supported", "iOS calling is currently not supported.", "warning");
     }
   };
@@ -263,9 +309,9 @@ export default function ContactsScreen() {
   }, [allContacts, favoriteIds, search, myNumber]);
 
   const getItemLayout = useMemo(() => sectionListGetItemLayout({ 
-    getItemHeight: () => 70, 
+    getItemHeight: () => 76, 
     getSeparatorHeight: () => 0, 
-    getSectionHeaderHeight: () => 36, 
+    getSectionHeaderHeight: () => 40, 
     listHeaderHeight: 180 
   }), [sections.length]);
 
@@ -295,6 +341,9 @@ export default function ContactsScreen() {
     const rawNumber = item.phoneNumbers?.[0]?.number || '';
     const letter = name.charAt(0).toUpperCase();
 
+    // 🟢 Generate Color based on Name Hash (Unique for every name)
+    const avatarStyle = getAvatarStyle(name);
+
     return (
       <TouchableOpacity 
         style={styles.row} 
@@ -306,20 +355,32 @@ export default function ContactsScreen() {
           {item.imageAvailable && item.image?.uri ? (
              <Image source={{ uri: item.image.uri }} style={styles.realImage} />
           ) : (
-             <View style={[styles.avatar, { backgroundColor: '#E3F2FD' }]}>
-                <Text style={styles.avatarText}>{letter}</Text>
+             // 🟢 Dynamic Pastel Background + Darker Text
+             <View style={[styles.avatar, { backgroundColor: isMe ? '#EFF6FF' : avatarStyle.backgroundColor }]}>
+                <Text style={[styles.avatarText, { color: isMe ? THEME.colors.accent : avatarStyle.color }]}>{letter}</Text>
              </View>
           )}
-          {(isMe || isFav) && <View style={styles.qBadge}><Text style={styles.qText}>{isMe ? 'Me' : '★'}</Text></View>}
+          
+          {(isMe || isFav) && (
+              <View style={styles.qBadge}>
+                  {isMe ? (
+                      <Text style={styles.qText}>Me</Text>
+                  ) : (
+                      <MaterialCommunityIcons name="star" size={10} color="#B45309" />
+                  )}
+              </View>
+          )}
         </View>
+
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
           {rawNumber ? <Text style={styles.number} numberOfLines={1}>{rawNumber}</Text> : null}
         </View>
+
         <View style={styles.actionCol}>
-           {isFav && <Ionicons name="heart" size={16} color="#D32F2F" style={{marginRight: 10}} />}
-           <TouchableOpacity onPress={() => handleNativeCall(rawNumber)}>
-             <Ionicons name="call" size={22} color={THEME.colors.primary} />
+           {/* 🟢 Call Button: Fixed Visibility (Dark Background, White Icon) */}
+           <TouchableOpacity onPress={() => handleNativeCall(rawNumber)} style={styles.callBtn}>
+             <Ionicons name="call" size={20} color="#FFF" />
            </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -330,28 +391,46 @@ export default function ContactsScreen() {
     <View style={styles.listHeader}>
        <View style={styles.actionsContainer}>
           <TouchableOpacity style={styles.actionCard} onPress={createNewContact}>
-             <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}><Ionicons name="person-add" size={20} color="#2E7D32" /></View>
+             <View style={[styles.iconCircle, { backgroundColor: '#F0FDF4' }]}>
+                 <Ionicons name="person-add" size={20} color="#16A34A" />
+             </View>
              <Text style={styles.actionText}>New Contact</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionCard}>
-             <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}><MaterialCommunityIcons name="account-group" size={22} color={THEME.colors.primary} /></View>
-             <Text style={styles.actionText}>New Group</Text>
+             <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
+                 <MaterialCommunityIcons name="account-group" size={22} color="#2563EB" />
+             </View>
+             <Text style={styles.actionText}>Create Group</Text>
           </TouchableOpacity>
        </View>
        <View style={styles.controlBar}>
           <Text style={styles.contactCount}>ALL CONTACTS ({allContacts.length})</Text>
-          <View style={{flex: 1}} />
-          <Ionicons name="filter" size={18} color="#666" />
        </View>
     </View>
   );
 
+  if (loading && allContacts.length === 0) {
+    return (
+        <View style={styles.container}>
+            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                <HeaderComponent searchText={search} setSearchText={setSearch} userPhoto={user?.profilePhoto} />
+                <View style={{paddingHorizontal: 20}}>
+                    {[1,2,3,4,5,6,7].map(i => <SkeletonContact key={i}/>)}
+                </View>
+            </SafeAreaView>
+        </View>
+    );
+  }
+
   if (!permissionGranted) {
     return (
         <View style={styles.center}>
-            <Text style={{ marginBottom: 20, color: THEME.colors.textMain }}>Contact Permission Required</Text>
+            <MaterialCommunityIcons name="account-lock" size={60} color={THEME.colors.textSub} />
+            <Text style={{ marginTop: 20, marginBottom: 20, color: THEME.colors.textMain, fontSize: 16 }}>
+                Access to contacts is required
+            </Text>
             <TouchableOpacity onPress={loadContacts} style={styles.retryBtn}>
-                <Text style={{color: '#fff', fontWeight: 'bold'}}>Grant Permission</Text>
+                <Text style={{color: '#fff', fontWeight: 'bold'}}>Allow Access</Text>
             </TouchableOpacity>
         </View>
     );
@@ -381,32 +460,31 @@ export default function ContactsScreen() {
               windowSize={5}           
               renderSectionHeader={({ section: { title } }) => (
                  <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, title === 'FAVORITES' && {color: '#D32F2F'}, title === 'ME' && {color: THEME.colors.primary}]}>{title}</Text>
+                    <Text style={[styles.sectionTitle, title === 'FAVORITES' && {color: THEME.colors.gold}]}>{title}</Text>
                  </View>
               )}
               ListHeaderComponent={ListHeader}
-              ListEmptyComponent={() => (
-                 loading ? <ActivityIndicator size="small" color={THEME.colors.primary} style={{marginTop: 20}} /> : <View style={styles.center}><Text style={{color: THEME.colors.textSub}}>No contacts found</Text></View>
-              )}
               contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
               refreshControl={
                 <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={THEME.colors.primary} />
               }
             />
             
+            {/* A-Z Sidebar */}
             {search.length === 0 && allContacts.length > 0 && (
               <View 
-                 style={styles.azSidebar} 
-                 onLayout={(e) => setSidebarHeight(e.nativeEvent.layout.height)} 
-                 onStartShouldSetResponder={() => true} 
-                 onResponderMove={handleSidebarTouch}
+                  style={styles.azSidebar} 
+                  onLayout={(e) => setSidebarHeight(e.nativeEvent.layout.height)} 
+                  onStartShouldSetResponder={() => true} 
+                  onResponderMove={handleSidebarTouch}
               >
                 {ALPHABET.map(char => <View key={char} style={styles.azItem}><Text style={styles.azText}>{char}</Text></View>)}
               </View>
             )}
             
+            {/* FAB */}
             <TouchableOpacity style={styles.fab} onPress={createNewContact}>
-                 <MaterialCommunityIcons name="content-save-plus-outline" size={24} color="#FFF" />
+                 <MaterialCommunityIcons name="plus" size={28} color="#FFF" />
             </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -416,49 +494,59 @@ export default function ContactsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  retryBtn: { backgroundColor: THEME.colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  retryBtn: { backgroundColor: THEME.colors.primary, paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12, elevation: 4 },
   
-  // Standardized Header Styles
-  headerWrapper: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '600', textTransform: 'uppercase' },
-  headerTitle: { fontSize: 32, fontWeight: '800', color: THEME.colors.textMain, letterSpacing: -1 },
-  profileBtn: { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  avatarImage: { width: 44, height: 44, borderRadius: 16, borderWidth: 2, borderColor: '#FFF' },
-  avatarPlaceholder: { width: 44, height: 44, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  // Header
+  headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  headerTitle: { fontSize: 34, fontWeight: '900', color: THEME.colors.primary, letterSpacing: -1 },
+  profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
+  avatarImage: { width: 48, height: 48, borderRadius: 18, borderWidth: 2, borderColor: '#FFF' },
+  avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   
-  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 48, borderRadius: 16, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 5 },
+  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
-  filterIcon: { padding: 4 },
+  filterIcon: { padding: 8, backgroundColor: '#F8FAFC', borderRadius: 12 },
 
-  // List Styles
-  listHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, height: 180 },
+  // List
+  listHeader: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 10, height: 160 },
   actionsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 16, width: '48%', borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  actionText: { fontSize: 14, fontWeight: '600', color: '#333' },
-  controlBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingBottom: 10 },
-  contactCount: { fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', letterSpacing: 0.5 },
+  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 14, borderRadius: 20, width: '48%', borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4 },
+  iconCircle: { width: 38, height: 38, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  actionText: { fontSize: 13, fontWeight: '700', color: '#334155' },
+  controlBar: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  contactCount: { fontSize: 12, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, textTransform: 'uppercase' },
   
-  sectionHeader: { backgroundColor: THEME.colors.bg, paddingHorizontal: 20, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', height: 36 },
-  sectionTitle: { fontSize: 13, fontWeight: '900', color: '#9CA3AF', letterSpacing: 0.5 },
+  sectionHeader: { backgroundColor: THEME.colors.bg, paddingHorizontal: 24, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  sectionTitle: { fontSize: 14, fontWeight: '900', color: '#94A3B8', letterSpacing: 0.5 },
   
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#FFF', height: 72, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }, 
+  // Contact Row
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 24, backgroundColor: '#FFF', height: 76, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }, 
   avatarContainer: { marginRight: 16 },
-  avatar: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
-  realImage: { width: 46, height: 46, borderRadius: 23 },
-  avatarText: { fontSize: 18, fontWeight: 'bold', color: '#555' },
-  qBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#DDD', alignItems: 'center', justifyContent: 'center', elevation: 2 },
-  qText: { color: '#000', fontSize: 9, fontWeight: 'bold' },
-  info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: THEME.colors.textMain, marginBottom: 3 },
-  number: { color: THEME.colors.textSub, fontSize: 13 },
+  avatar: { width: 50, height: 50, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  realImage: { width: 50, height: 50, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9' },
+  avatarText: { fontSize: 20, fontWeight: '800' },
+  qBadge: { position: 'absolute', bottom: -4, right: -4, backgroundColor: '#FEF3C7', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
+  qText: { color: '#B45309', fontSize: 10, fontWeight: '800' },
+  
+  info: { flex: 1, justifyContent: 'center' },
+  name: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain, marginBottom: 2 },
+  number: { color: THEME.colors.textSub, fontSize: 13, fontWeight: '500' },
+  
   actionCol: { flexDirection: 'row', alignItems: 'center' },
   
-  azSidebar: { position: 'absolute', right: 0, top: 180, bottom: 100, width: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', zIndex: 50 },
-  azItem: { flex: 1, width: 30, alignItems: 'center', justifyContent: 'center' },
-  azText: { fontSize: 10, fontWeight: 'bold', color: '#9CA3AF' },
+  // 🟢 Fixed Call Button Visibility
+  callBtn: { width: 42, height: 42, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: THEME.colors.primary, shadowOpacity: 0.2, shadowRadius: 4, elevation: 2 },
   
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: THEME.colors.primary, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: THEME.colors.primary, shadowOpacity: 0.4, shadowRadius: 8 },
+  azSidebar: { position: 'absolute', right: 2, top: 180, bottom: 100, width: 24, alignItems: 'center', justifyContent: 'center', zIndex: 50 },
+  azItem: { flex: 1, width: 30, alignItems: 'center', justifyContent: 'center' },
+  azText: { fontSize: 10, fontWeight: '800', color: '#CBD5E1' },
+  
+  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: THEME.colors.primary, width: 60, height: 60, borderRadius: 24, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: THEME.colors.primary, shadowOpacity: 0.4, shadowRadius: 12 },
+
+  // Skeleton Styles
+  skeletonAvatar: { width: 50, height: 50, borderRadius: 20, backgroundColor: '#E2E8F0', marginRight: 16 },
+  skeletonText: { backgroundColor: '#E2E8F0', borderRadius: 4 },
 });

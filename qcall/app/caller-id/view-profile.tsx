@@ -9,12 +9,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { API_BASE_URL } from '../../constants/config';
 
-// 🟢 1. Import Secure Ops
+// 🟢 Secure Ops Context
 import { useSecureOps } from '../../context/SecureOperationsContext';
 
 const { width } = Dimensions.get('window');
 
-// 🎨 Theme Constants
 const THEME = {
   dark: '#0F172A',
   card: '#1E293B',
@@ -28,15 +27,12 @@ const THEME = {
 export default function ViewCallerProfileScreen() {
   const router = useRouter();
   const { number } = useLocalSearchParams();
-  
-  // 🟢 2. Get the markAsSafe function from context
   const { markAsSafe } = useSecureOps();
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [spamScore, setSpamScore] = useState(0);
 
-  // Smart Back Logic
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -49,7 +45,6 @@ export default function ViewCallerProfileScreen() {
     fetchProfileData();
   }, [number]);
 
-  // We keep this as-is since you said View Profile is working fine!
   const fetchProfileData = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/contacts/identify?number=${number}`);
@@ -69,7 +64,7 @@ export default function ViewCallerProfileScreen() {
     }
   };
 
-  const handleAction = (action: string) => {
+  const handleAction = async (action: string) => {
     Haptics.selectionAsync();
     const cleanNumber = Array.isArray(number) ? number[0] : number;
 
@@ -77,15 +72,30 @@ export default function ViewCallerProfileScreen() {
       case 'call':
         Linking.openURL(`tel:${cleanNumber}`);
         break;
+
+      // 🚀 REDIRECTION TO DEFAULT SMS APP (Google Messages)
       case 'message':
-        Linking.openURL(`sms:${cleanNumber}`);
+        try {
+          const smsUrl = `sms:${cleanNumber}`;
+          const supported = await Linking.canOpenURL(smsUrl);
+          if (supported) {
+            await Linking.openURL(smsUrl);
+          } else {
+            Alert.alert("Error", "Aapka default messaging app nahi mil raha.");
+          }
+        } catch (error) {
+          console.error("SMS Redirect Error:", error);
+        }
         break;
+
       case 'whatsapp':
-        Linking.openURL(`whatsapp://send?phone=${cleanNumber}`);
+        Linking.openURL(`whatsapp://send?phone=${cleanNumber.replace(/[^\d]/g, '')}`);
         break;
+
       case 'block':
         router.push({ pathname: '/caller-id/block-number', params: { number: cleanNumber } });
         break;
+
       case 'report':
         router.push({ pathname: '/caller-id/spam-report', params: { number: cleanNumber } });
         break;
@@ -94,20 +104,17 @@ export default function ViewCallerProfileScreen() {
 
   const handleMarkAsSafe = async () => {
     const cleanNumber = Array.isArray(number) ? number[0] : number;
-
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert("Mark as Safe", "This decreases the spam score for this number. Are you sure?", [
+    
+    Alert.alert("Mark as Safe", "Kya aap sure hain ki ye number safe hai?", [
       { text: "Cancel", style: "cancel" },
       { 
         text: "Yes, I Trust", 
         onPress: async () => {
-            // 🟢 3. Call the secure function
-            // The Context handles the Token & API securely
             const success = await markAsSafe(cleanNumber);
-            
             if (success) {
-                setSpamScore((prev) => Math.max(0, prev - 10)); // Optimistic Update
-                Alert.alert("Success", "Thanks! You helped improve our directory.");
+                setSpamScore((prev) => Math.max(0, prev - 10)); 
+                Alert.alert("Success", "Shukriya! Aapne directory behtar banane mein madad ki.");
             }
         }
       }
@@ -129,7 +136,6 @@ export default function ViewCallerProfileScreen() {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         
-        {/* Header Banner */}
         <View style={styles.bannerContainer}>
           <LinearGradient
             colors={isSpam ? ['#7F1D1D', '#EF4444'] : ['#1E3A8A', '#3B82F6']}
@@ -140,7 +146,6 @@ export default function ViewCallerProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Avatar & Main Info */}
         <View style={styles.profileHeader}>
           <View style={[styles.avatarContainer, isSpam && { borderColor: THEME.danger }]}>
             {profile?.photo ? (
@@ -179,7 +184,6 @@ export default function ViewCallerProfileScreen() {
           </View>
         </View>
 
-        {/* Spam Meter Section */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Reputation Score</Text>
@@ -194,19 +198,12 @@ export default function ViewCallerProfileScreen() {
                style={[styles.progressBarFill, { width: `${Math.min(spamScore, 100)}%` }]}
             />
           </View>
-          <Text style={styles.spamDesc}>
-            {isSpam 
-              ? "This number has been reported multiple times as spam." 
-              : "This number has a clean record in our database."}
-          </Text>
-
           <TouchableOpacity style={styles.safeBtn} onPress={handleMarkAsSafe}>
              <Feather name="thumbs-up" size={18} color={THEME.success} />
              <Text style={styles.safeBtnText}>I trust this number (Not Spam)</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Action Grid */}
         <View style={styles.gridContainer}>
           <TouchableOpacity style={styles.gridItem} onPress={() => handleAction('call')}>
             <View style={[styles.iconBox, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
@@ -237,7 +234,6 @@ export default function ViewCallerProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Report Section */}
         <TouchableOpacity style={styles.reportBtn} onPress={() => handleAction('report')}>
           <Feather name="flag" size={20} color={THEME.subText} />
           <Text style={styles.reportText}>Report as Spam / Fraud</Text>
@@ -269,7 +265,6 @@ const styles = StyleSheet.create({
   scoreText: { fontSize: 20, fontWeight: '800' },
   progressBarBg: { height: 8, backgroundColor: '#334155', borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
   progressBarFill: { height: '100%', borderRadius: 4 },
-  spamDesc: { color: THEME.subText, fontSize: 13, lineHeight: 20 },
   safeBtn: { marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 14, backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
   safeBtnText: { color: THEME.success, fontWeight: '700', fontSize: 14 },
   gridContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 30 },

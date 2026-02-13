@@ -12,8 +12,8 @@ import * as Contacts from 'expo-contacts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import sectionListGetItemLayout from 'react-native-section-list-get-item-layout';
 import { useRouter, useFocusEffect } from 'expo-router'; 
+import * as IntentLauncher from 'expo-intent-launcher'; 
 
-// 🟢 Services & Config
 import { useAuth } from '../../hooks/useAuth'; 
 import { useCustomAlert } from '../../context/AlertContext';
 
@@ -23,7 +23,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// 🟢 Premium Theme
 const THEME = {
   colors: {
     bg: '#F8FAFC',
@@ -42,27 +41,15 @@ const THEME = {
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-// 🟢 Helper to generate consistent pastel colors based on name string
+// 🟢 1. COLORFUL AVATAR GENERATOR
 const getAvatarStyle = (name: string) => {
   const bgColors = [
-    '#F3F4F6', // Grey
-    '#ECFEFF', // Cyan
-    '#F0FDF4', // Green
-    '#FFF7ED', // Orange
-    '#FEF2F2', // Red
-    '#F5F3FF', // Violet
-    '#EFF6FF', // Blue
-    '#FFFBEB', // Yellow
+    '#F3F4F6', '#ECFEFF', '#F0FDF4', '#FFF7ED', '#FEF2F2', '#F5F3FF', '#EFF6FF', '#FFFBEB',
+    '#E0F2FE', '#FAE8FF', '#FFE4E6', '#DCFCE7' 
   ];
   const textColors = [
-    '#374151', // Grey Text
-    '#0E7490', // Cyan Text
-    '#15803D', // Green Text
-    '#C2410C', // Orange Text
-    '#B91C1C', // Red Text
-    '#7C3AED', // Violet Text
-    '#1D4ED8', // Blue Text
-    '#B45309', // Yellow Text
+    '#374151', '#0E7490', '#15803D', '#C2410C', '#B91C1C', '#7C3AED', '#1D4ED8', '#B45309',
+    '#0369A1', '#86198F', '#BE123C', '#15803D'
   ];
   
   let hash = 0;
@@ -71,14 +58,12 @@ const getAvatarStyle = (name: string) => {
   }
   
   const index = Math.abs(hash) % bgColors.length;
-  
-  return {
-    backgroundColor: bgColors[index],
-    color: textColors[index]
+  return { 
+    backgroundColor: bgColors[index], 
+    color: textColors[index] 
   };
 };
 
-// --- SKELETON COMPONENT ---
 const SkeletonContact = () => {
   const opacity = useRef(new Animated.Value(0.3)).current;
   useEffect(() => {
@@ -89,7 +74,6 @@ const SkeletonContact = () => {
       ])
     ).start();
   }, []);
-
   return (
     <View style={styles.row}>
       <Animated.View style={[styles.skeletonAvatar, { opacity }]} />
@@ -101,10 +85,8 @@ const SkeletonContact = () => {
   );
 };
 
-// --- HEADER COMPONENT ---
 const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
   return (
     <View style={styles.headerWrapper}>
       <View style={styles.topRow}>
@@ -160,7 +142,6 @@ export default function ContactsScreen() {
     useCallback(() => {
       const checkAndLoad = async () => {
         const { status } = await Contacts.getPermissionsAsync();
-        
         if (status === 'granted') {
           setPermissionGranted(true);
           if (allContacts.length === 0) loadContacts();
@@ -175,7 +156,6 @@ export default function ContactsScreen() {
           }
         }
       };
-
       loadUserData(); 
       loadFavorites();
       checkAndLoad();
@@ -222,40 +202,46 @@ export default function ContactsScreen() {
               Contacts.Fields.LastName
           ] 
       });
-      
       if (data) {
-        const sorted = data
-          .filter(c => c.name && c.name.trim() !== '')
-          .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const sorted = data.filter(c => c.name && c.name.trim() !== '').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setAllContacts(sorted);
       }
-    } catch (e) { 
-        console.error("Error loading contacts:", e); 
-    } finally { 
-        setLoading(false); 
-    }
+    } catch (e) { console.error("Error loading contacts:", e); } 
+    finally { setLoading(false); }
   };
 
-  const onRefresh = useCallback(() => {
-    loadContacts();
-  }, []);
+  const onRefresh = useCallback(() => { loadContacts(); }, []);
 
+  // 🟢 2. SMART SEAMLESS "SAVE CONTACT"
   const createNewContact = async () => {
-    try {
-      const { status } = await Contacts.requestPermissionsAsync();
-      if (status === 'granted') {
+    if (Platform.OS !== 'android') {
         await Contacts.presentFormAsync(null);
-        setTimeout(loadContacts, 2000);
-      } else {
-        showAlert("Permission Denied", "We cannot access contacts to add a new one.", "error");
-      }
-    } catch (e) { console.log(e); }
+        return;
+    }
+
+    try {
+        // A. Try forcing Google Contacts
+        await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
+            data: 'content://com.android.contacts/contacts',
+            packageName: 'com.google.android.contacts' 
+        });
+    } catch (error) {
+        console.log("Google Contacts not installed, falling back...");
+        try {
+            // B. Fallback
+            await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
+                data: 'content://com.android.contacts/contacts'
+            });
+        } catch (e) {
+            showAlert("Error", "Could not open contact editor.", "error");
+        }
+    }
+    setTimeout(loadContacts, 3000);
   };
 
   const handleNativeCall = async (rawNumber: string) => {
     if (!rawNumber) return;
     const cleanNumber = rawNumber.replace(/[^\d+]/g, '');
-
     if (Platform.OS === 'android') {
         try {
             const isDefault = await CallManagerModule.checkIsDefaultDialer();
@@ -283,17 +269,12 @@ export default function ContactsScreen() {
         c.name?.toLowerCase().includes(lowerSearch) || 
         c.phoneNumbers?.some((p:any) => p.number?.includes(search))
     );
-    
     const favorites = filtered.filter(c => favoriteIds.includes(c.id || ''));
     const myProfile = { id: 'me_profile', name: 'Me (You)', phoneNumbers: [{ number: myNumber }], imageAvailable: false };
     
     const result = [];
-    if (search.length === 0 || 'me'.includes(lowerSearch)) {
-        result.push({ title: 'ME', data: [myProfile] });
-    }
-    if (favorites.length > 0) {
-        result.push({ title: 'FAVORITES', data: favorites });
-    }
+    if (search.length === 0 || 'me'.includes(lowerSearch)) result.push({ title: 'ME', data: [myProfile] });
+    if (favorites.length > 0) result.push({ title: 'FAVORITES', data: favorites });
     
     if (filtered.length > 0) {
       const groups: { [key: string]: any[] } = {};
@@ -309,10 +290,7 @@ export default function ContactsScreen() {
   }, [allContacts, favoriteIds, search, myNumber]);
 
   const getItemLayout = useMemo(() => sectionListGetItemLayout({ 
-    getItemHeight: () => 76, 
-    getSeparatorHeight: () => 0, 
-    getSectionHeaderHeight: () => 40, 
-    listHeaderHeight: 180 
+    getItemHeight: () => 76, getSeparatorHeight: () => 0, getSectionHeaderHeight: () => 40, listHeaderHeight: 180 
   }), [sections.length]);
 
   const scrollToLetter = (letter: string) => {
@@ -340,8 +318,8 @@ export default function ContactsScreen() {
     const name = item.name || 'Unknown';
     const rawNumber = item.phoneNumbers?.[0]?.number || '';
     const letter = name.charAt(0).toUpperCase();
-
-    // 🟢 Generate Color based on Name Hash (Unique for every name)
+    
+    // 🟢 3. APPLY COLORFUL AVATAR
     const avatarStyle = getAvatarStyle(name);
 
     return (
@@ -349,25 +327,26 @@ export default function ContactsScreen() {
         style={styles.row} 
         activeOpacity={0.7} 
         onLongPress={() => !isMe && toggleFavorite(item.id)} 
-        onPress={() => handleNativeCall(rawNumber)} 
+        onPress={() => {
+            if (isMe) return; 
+            // @ts-ignore
+            router.push({
+                pathname: '/contact_details', 
+                params: { contactId: item.id } 
+            });
+        }} 
       >
         <View style={styles.avatarContainer}>
           {item.imageAvailable && item.image?.uri ? (
              <Image source={{ uri: item.image.uri }} style={styles.realImage} />
           ) : (
-             // 🟢 Dynamic Pastel Background + Darker Text
              <View style={[styles.avatar, { backgroundColor: isMe ? '#EFF6FF' : avatarStyle.backgroundColor }]}>
                 <Text style={[styles.avatarText, { color: isMe ? THEME.colors.accent : avatarStyle.color }]}>{letter}</Text>
              </View>
           )}
-          
           {(isMe || isFav) && (
               <View style={styles.qBadge}>
-                  {isMe ? (
-                      <Text style={styles.qText}>Me</Text>
-                  ) : (
-                      <MaterialCommunityIcons name="star" size={10} color="#B45309" />
-                  )}
+                  {isMe ? <Text style={styles.qText}>Me</Text> : <MaterialCommunityIcons name="star" size={10} color="#B45309" />}
               </View>
           )}
         </View>
@@ -378,7 +357,6 @@ export default function ContactsScreen() {
         </View>
 
         <View style={styles.actionCol}>
-           {/* 🟢 Call Button: Fixed Visibility (Dark Background, White Icon) */}
            <TouchableOpacity onPress={() => handleNativeCall(rawNumber)} style={styles.callBtn}>
              <Ionicons name="call" size={20} color="#FFF" />
            </TouchableOpacity>
@@ -426,9 +404,7 @@ export default function ContactsScreen() {
     return (
         <View style={styles.center}>
             <MaterialCommunityIcons name="account-lock" size={60} color={THEME.colors.textSub} />
-            <Text style={{ marginTop: 20, marginBottom: 20, color: THEME.colors.textMain, fontSize: 16 }}>
-                Access to contacts is required
-            </Text>
+            <Text style={{ marginTop: 20, marginBottom: 20, color: THEME.colors.textMain, fontSize: 16 }}>Access to contacts is required</Text>
             <TouchableOpacity onPress={loadContacts} style={styles.retryBtn}>
                 <Text style={{color: '#fff', fontWeight: 'bold'}}>Allow Access</Text>
             </TouchableOpacity>
@@ -465,12 +441,9 @@ export default function ContactsScreen() {
               )}
               ListHeaderComponent={ListHeader}
               contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-              refreshControl={
-                <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={THEME.colors.primary} />
-              }
+              refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={THEME.colors.primary} />}
             />
             
-            {/* A-Z Sidebar */}
             {search.length === 0 && allContacts.length > 0 && (
               <View 
                   style={styles.azSidebar} 
@@ -482,12 +455,12 @@ export default function ContactsScreen() {
               </View>
             )}
             
-            {/* FAB */}
+            {/* 🟢 FAB FIXED POSITION: bottom: 110 */}
             <TouchableOpacity style={styles.fab} onPress={createNewContact}>
                  <MaterialCommunityIcons name="plus" size={28} color="#FFF" />
             </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -497,7 +470,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   retryBtn: { backgroundColor: THEME.colors.primary, paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12, elevation: 4 },
   
-  // Header
   headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
@@ -510,7 +482,6 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
   filterIcon: { padding: 8, backgroundColor: '#F8FAFC', borderRadius: 12 },
 
-  // List
   listHeader: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 10, height: 160 },
   actionsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 14, borderRadius: 20, width: '48%', borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4 },
@@ -522,7 +493,6 @@ const styles = StyleSheet.create({
   sectionHeader: { backgroundColor: THEME.colors.bg, paddingHorizontal: 24, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   sectionTitle: { fontSize: 14, fontWeight: '900', color: '#94A3B8', letterSpacing: 0.5 },
   
-  // Contact Row
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 24, backgroundColor: '#FFF', height: 76, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }, 
   avatarContainer: { marginRight: 16 },
   avatar: { width: 50, height: 50, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
@@ -536,17 +506,15 @@ const styles = StyleSheet.create({
   number: { color: THEME.colors.textSub, fontSize: 13, fontWeight: '500' },
   
   actionCol: { flexDirection: 'row', alignItems: 'center' },
-  
-  // 🟢 Fixed Call Button Visibility
   callBtn: { width: 42, height: 42, borderRadius: 16, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: THEME.colors.primary, shadowOpacity: 0.2, shadowRadius: 4, elevation: 2 },
   
   azSidebar: { position: 'absolute', right: 2, top: 180, bottom: 100, width: 24, alignItems: 'center', justifyContent: 'center', zIndex: 50 },
   azItem: { flex: 1, width: 30, alignItems: 'center', justifyContent: 'center' },
   azText: { fontSize: 10, fontWeight: '800', color: '#CBD5E1' },
   
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: THEME.colors.primary, width: 60, height: 60, borderRadius: 24, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: THEME.colors.primary, shadowOpacity: 0.4, shadowRadius: 12 },
+  // 🟢 FAB POSITION FIXED
+  fab: { position: 'absolute', bottom: 110, right: 24, backgroundColor: THEME.colors.primary, width: 60, height: 60, borderRadius: 24, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: THEME.colors.primary, shadowOpacity: 0.4, shadowRadius: 12 },
 
-  // Skeleton Styles
   skeletonAvatar: { width: 50, height: 50, borderRadius: 20, backgroundColor: '#E2E8F0', marginRight: 16 },
   skeletonText: { backgroundColor: '#E2E8F0', borderRadius: 4 },
 });

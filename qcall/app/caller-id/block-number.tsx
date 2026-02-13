@@ -1,95 +1,183 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
-// 🟢 1. Import the new Secure Ops Hook
-import { useSecureOps } from '../../context/SecureOperationsContext';
+// 🟢 Shared Logic
+import { useSecureOps } from '../../context/SecureOperationsContext'; // Server
+import { BlockService } from '../../services/BlockService'; // Local
 
-export default function BlockNumberScreen() {
+const THEME = {
+  danger: '#EF4444',
+  text: '#1E293B',
+  sub: '#64748B',
+  bg: '#FFFFFF',
+  success: '#10B981'
+};
+
+export default function CallerIdBlockScreen() {
   const router = useRouter();
-  const { number } = useLocalSearchParams();
+  const { number, name } = useLocalSearchParams(); 
   
-  // 🟢 2. Get the blockNumber function from context
-  const { blockNumber } = useSecureOps();
+  // 🛠️ UPDATED: Added unblockNumber from Context
+  const { blockNumber: serverBlock, unblockNumber: serverUnblock } = useSecureOps();
   
   const [loading, setLoading] = useState(false);
   const [alsoReport, setAlsoReport] = useState(true);
+  const [isCurrentlyBlocked, setIsCurrentlyBlocked] = useState(false);
 
-  const handleBack = () => {
+  // Handle params safely
+  const cleanNumber = Array.isArray(number) ? number[0] : number || 'Unknown';
+  const contactName = Array.isArray(name) ? name[0] : name || 'Unknown Caller';
+
+  // Check initial block status
+  useEffect(() => {
+    const checkStatus = async () => {
+      const blocked = await BlockService.isBlocked(cleanNumber);
+      setIsCurrentlyBlocked(blocked);
+    };
+    if (cleanNumber !== 'Unknown') checkStatus();
+  }, [cleanNumber]);
+
+  const handleClose = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/');
   };
 
+  // 🔴 LOGIC: Block Number
   const handleBlock = async () => {
+    if (!cleanNumber || cleanNumber === 'Unknown') return;
     setLoading(true);
 
-    // Ensure number is a string
-    const cleanNumber = Array.isArray(number) ? number[0] : number;
+    try {
+        // 1. Server Block (Spam Report) - Do this first to ensure DB is updated
+        const success = await serverBlock(cleanNumber, alsoReport);
 
-    // 🟢 3. Call the secure function
-    // The Context handles the Token, API URL, and Errors automatically.
-    const success = await blockNumber(cleanNumber, alsoReport);
+        if (success) {
+            // 2. Local Block (Instant Dialer Update)
+            await BlockService.blockNumber(cleanNumber, contactName);
+            setIsCurrentlyBlocked(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            
+            Alert.alert("Blocked", `${cleanNumber} is now blocked.`, [
+                { text: "Done", onPress: handleClose }
+            ]);
+        } else {
+            Alert.alert("Error", "Server failed to block number.");
+        }
 
-    setLoading(false);
+    } catch (e) {
+        Alert.alert("Error", "Could not block number.");
+    } finally {
+        setLoading(false);
+    }
+  };
 
-    // 🟢 4. Handle Success UI
-    // If 'success' is false, the Context has already shown an error Alert.
-    if (success) {
-      Alert.alert("Blocked", `${cleanNumber} has been blocked.`, [
-        { text: "OK", onPress: handleBack }
-      ]);
+  // 🟢 LOGIC: Unblock Number (New Sync Logic)
+  const handleUnblock = async () => {
+    if (!cleanNumber || cleanNumber === 'Unknown') return;
+    setLoading(true);
+
+    try {
+        // 1. Server Unblock (Remove from MongoDB)
+        const success = await serverUnblock(cleanNumber);
+
+        if (success) {
+            // 2. Local Unblock (Update Dialer List)
+            await BlockService.unblockNumber(cleanNumber);
+            setIsCurrentlyBlocked(false);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+            Alert.alert("Unblocked", `${cleanNumber} has been removed from block list.`, [
+                { text: "Done", onPress: handleClose }
+            ]);
+        } else {
+            Alert.alert("Error", "Server failed to unblock number.");
+        }
+    } catch (e) {
+        Alert.alert("Error", "Could not unblock number.");
+    } finally {
+        setLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack}>
-          <Feather name="x" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Block Number</Text>
-      </View>
-
-      <View style={styles.content}>
-        <Text style={styles.warning}>Block this caller?</Text>
-        <Text style={styles.number}>{number}</Text>
-        <Text style={styles.desc}>
-          They will not be able to call you. You can unblock them anytime in settings.
-        </Text>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Also report as spam</Text>
-          <Switch 
-            value={alsoReport} 
-            onValueChange={setAlsoReport} 
-            trackColor={{ false: "#767577", true: "#EF4444" }}
-          />
+      <View style={styles.card}>
+        
+        {/* Header */}
+        <View style={styles.header}>
+            <MaterialCommunityIcons 
+                name={isCurrentlyBlocked ? "shield-check" : "shield-alert"} 
+                size={40} 
+                color={isCurrentlyBlocked ? THEME.success : THEME.danger} 
+            />
+            <Text style={styles.title}>
+                {isCurrentlyBlocked ? "Number Blocked" : "Block this number?"}
+            </Text>
         </View>
 
-        <TouchableOpacity style={styles.blockBtn} onPress={handleBlock} disabled={loading}>
+        {/* Info */}
+        <View style={styles.infoBox}>
+            <Text style={styles.name}>{contactName}</Text>
+            <Text style={styles.number}>{cleanNumber}</Text>
+        </View>
+
+        {!isCurrentlyBlocked && (
+            <View style={styles.switchRow}>
+                <Text style={styles.switchLabel}>Report as Spam</Text>
+                <Switch 
+                    value={alsoReport} 
+                    onValueChange={setAlsoReport} 
+                    trackColor={{ false: "#E2E8F0", true: "#FCA5A5" }}
+                    thumbColor={alsoReport ? THEME.danger : "#f4f3f4"}
+                />
+            </View>
+        )}
+
+        {/* Actions */}
+        <TouchableOpacity 
+            style={[styles.actionBtn, { backgroundColor: isCurrentlyBlocked ? THEME.text : THEME.danger }]} 
+            onPress={isCurrentlyBlocked ? handleUnblock : handleBlock} 
+            disabled={loading}
+        >
           {loading ? (
             <ActivityIndicator color="#FFF" />
           ) : (
-            <Text style={styles.blockBtnText}>BLOCK CONTACT</Text>
+            <Text style={styles.btnText}>
+                {isCurrentlyBlocked ? "UNBLOCK NUMBER" : "BLOCK & REPORT"}
+            </Text>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.cancelBtn} onPress={handleClose}>
+            <Text style={styles.cancelText}>No, Cancel</Text>
+        </TouchableOpacity>
+
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
-  header: { padding: 20, flexDirection: 'row', alignItems: 'center', gap: 15 },
-  title: { fontSize: 20, fontWeight: '700' },
-  content: { padding: 24, alignItems: 'center', marginTop: 20 },
-  warning: { fontSize: 18, fontWeight: '600', marginBottom: 10, color: '#333' },
-  number: { fontSize: 28, fontWeight: 'bold', color: '#EF4444', marginBottom: 10 },
-  desc: { fontSize: 14, color: '#666', marginBottom: 40, textAlign: 'center', paddingHorizontal: 20, lineHeight: 20 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 30, paddingHorizontal: 10 },
-  label: { fontSize: 16, fontWeight: '500', color: '#333' },
-  blockBtn: { backgroundColor: '#EF4444', paddingVertical: 16, width: '100%', alignItems: 'center', borderRadius: 15, elevation: 2 },
-  blockBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
+  container: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  card: { backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  
+  header: { alignItems: 'center', marginBottom: 20 },
+  title: { fontSize: 20, fontWeight: '700', color: THEME.text, marginTop: 10 },
+  
+  infoBox: { alignItems: 'center', marginBottom: 30 },
+  name: { fontSize: 18, fontWeight: '600', color: THEME.text },
+  number: { fontSize: 16, color: THEME.sub, marginTop: 4 },
+
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 30, backgroundColor: '#F8FAFC', padding: 16, borderRadius: 16 },
+  switchLabel: { fontSize: 16, fontWeight: '600', color: THEME.text },
+
+  actionBtn: { paddingVertical: 16, width: '100%', alignItems: 'center', borderRadius: 16, marginBottom: 12 },
+  btnText: { color: '#FFF', fontWeight: '800', fontSize: 14, letterSpacing: 1 },
+
+  cancelBtn: { paddingVertical: 12 },
+  cancelText: { color: THEME.sub, fontWeight: '600' }
 });

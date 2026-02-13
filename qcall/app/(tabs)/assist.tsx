@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  Image, TextInput, Animated, Easing, Platform 
+  Image, TextInput, Animated, Easing, Dimensions, Pressable
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -9,244 +9,302 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-// 🟢 1. IMPORT USER CONTEXT
 import { useAuth } from '../../hooks/useAuth';
 
-// --- COLORS ---
-const COLORS = {
-  primary: '#0056D2',
-  background: '#fff',
-  searchBarBg: '#ECECEC',
-  textMain: '#1F1F1F',
-  textSub: '#757575',
+const { width } = Dimensions.get('window');
+
+// 🟢 THEME: White & Deep Sapphire
+const THEME = {
+  bg: '#FFFFFF',
+  secondaryBg: '#F8FAFC', 
+  primary: '#0F172A',   // Deep Navy
+  accent: '#2563EB',    // Electric Blue
+  aura: '#3B82F6',      // Lighter Blue for Glow
+  textMain: '#1E293B',
+  textSub: '#64748B',
+  border: '#E2E8F0',
+  success: '#10B981',
+  danger: '#EF4444'
 };
 
-// --- SCENARIOS (Scammer/Spam Contexts) ---
 const SCENARIOS = [
-  "Caller: 'Hello, I am calling from the Tax Department regarding pending dues...'",
-  "Caller: 'You have won a lottery! Just pay a small fee to claim it...'",
-  "Caller: 'Your bank account has been compromised. Give me your OTP...'",
-  "Caller: 'We are offering a pre-approved loan with 0% interest...'",
-  "Caller: 'This is Amazon support. A suspicious purchase was made...'"
+  "Caller: 'Hello, calling from Tax Dept...'",
+  "Caller: 'You won a lottery! Pay fee...'",
+  "Caller: 'Bank alert! Give OTP now...'",
+  "Caller: 'Pre-approved loan 0% interest...'"
 ];
 
-// --- 2. UPDATED HEADER COMPONENT ---
+// 🟢 CARD DATA
+const CARD_WIDTH = 160;
+const CARD_MARGIN = 16;
+const FULL_CARD_SIZE = CARD_WIDTH + CARD_MARGIN;
+
+const STEPS = [
+  { id: '1', title: 'Call Screening', desc: 'AI answers unknown calls.', icon: 'call-outline', color: '#2563EB' },
+  { id: '2', title: 'Intent Detect', desc: 'Asks caller for name & reason.', icon: 'analytics-outline', color: '#7C3AED' },
+  { id: '3', title: 'Live Transcript', desc: 'Read the conversation real-time.', icon: 'chatbubbles-outline', color: '#059669' },
+  { id: '4', title: 'Spam Block', desc: 'Robocalls are instantly blocked.', icon: 'shield-checkmark-outline', color: '#DC2626' },
+  { id: '5', title: 'Smart Reply', desc: 'Tap to ask AI to suggest replies.', icon: 'bulb-outline', color: '#D97706' },
+  { id: '6', title: 'Privacy First', desc: 'Calls processed securely on device.', icon: 'lock-closed-outline', color: '#0891B2' },
+];
+
+// Duplicate data to create seamless loop
+const MARQUEE_DATA = [...STEPS, ...STEPS, ...STEPS]; 
+
+// --- HEADER ---
 const HeaderComponent = ({ router, userPhoto }: any) => (
-  <View style={styles.headerContainer}>
-    <View style={styles.searchBar}>
-      
-      {/* 🔴 Dynamic Profile Picture */}
-      <TouchableOpacity 
-        style={styles.profileIconLeft}
-        onPress={() => router.push('/(tabs)/profile')} // Navigate to Profile
-      >
-         {userPhoto ? (
-            <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
-         ) : (
-            // Fallback if no photo
-            <View style={[styles.avatarImage, { backgroundColor: '#CCC', justifyContent: 'center', alignItems: 'center' }]}>
-               <Ionicons name="person" size={18} color="#FFF" />
-            </View>
-         )}
-      </TouchableOpacity>
-      
-      <TextInput 
-        placeholder="Search Assistant..." 
-        placeholderTextColor="#777" 
-        style={styles.searchInput}
-        editable={false} 
-      />
-      
-      <View style={styles.searchRightIcons}>
-         <TouchableOpacity style={styles.iconButton}>
-           <MaterialCommunityIcons name="qrcode-scan" size={22} color="#555" />
-         </TouchableOpacity>
-      </View>
+  <View style={styles.headerWrapper}>
+    <View style={styles.topRow}>
+        <View>
+            <Text style={styles.headerDate}>AI PROTECTION</Text>
+            <Text style={styles.headerTitle}>Assistant</Text>
+        </View>
+        <TouchableOpacity style={styles.profileBtn} onPress={() => router.push('/profile')} activeOpacity={0.8}>
+            {userPhoto ? (
+                <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
+            ) : (
+                <View style={styles.avatarPlaceholder}>
+                    <Ionicons name="person" size={24} color="#FFF" />
+                </View>
+            )}
+        </TouchableOpacity>
+    </View>
+    <View style={styles.searchBlock}>
+        <Ionicons name="sparkles" size={18} color={THEME.accent} />
+        <TextInput 
+            placeholder="Ask QCall Assistant..." 
+            placeholderTextColor={THEME.textSub} 
+            style={styles.searchInput}
+            editable={false} 
+        />
     </View>
   </View>
 );
 
-// --- FLOATING ICON COMPONENT ---
+// --- FLOATING BACKGROUND ---
 const FloatingIcon = ({ name, size, top, left, right, bottom, delay = 0 }: any) => {
   const floatAnim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -10, duration: 3000, delay: delay, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 3000, useNativeDriver: true, easing: Easing.inOut(Easing.sin) })
+        Animated.timing(floatAnim, { toValue: -15, duration: 4000, delay: delay, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 4000, useNativeDriver: true, easing: Easing.inOut(Easing.sin) })
       ])
     ).start();
   }, []);
-
   return (
-    <Animated.View 
-      style={{ 
-        position: 'absolute', top, left, right, bottom, opacity: 0.06, 
-        transform: [{ translateY: floatAnim }, { rotate: '-10deg' }] 
-      }}
-    >
-      <Ionicons name={name} size={size} color="#0056D2" />
+    <Animated.View style={{ position: 'absolute', top, left, right, bottom, opacity: 0.03, transform: [{ translateY: floatAnim }, { rotate: '-10deg' }] }}>
+      <Ionicons name={name} size={size} color={THEME.primary} />
     </Animated.View>
   );
 };
 
 export default function AssistScreen() {
   const router = useRouter();
-
-  // 🔴 3. GET USER DATA FROM CONTEXT
   const { user } = useAuth();
   const userPhoto = user?.profilePhoto || null;
   
-  // Animations
   const phoneFloat = useRef(new Animated.Value(0)).current;
+  const auraAnim = useRef(new Animated.Value(0.3)).current; // 🟢 Aura Opacity
   
-  // Typing Logic State
+  // 🟢 Marquee Animation Refs
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const [isPaused, setIsPaused] = useState(false);
+
   const [typingText, setTypingText] = useState('');
   const [scenarioIndex, setScenarioIndex] = useState(0);
 
   useEffect(() => {
-    // 1. Phone Floating Animation
+    // 1. Phone Floating
     Animated.loop(
       Animated.sequence([
-        Animated.timing(phoneFloat, { toValue: -15, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.sin) }),
-        Animated.timing(phoneFloat, { toValue: 0, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.sin) })
+        Animated.timing(phoneFloat, { toValue: -10, duration: 2500, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
+        Animated.timing(phoneFloat, { toValue: 0, duration: 2500, useNativeDriver: true, easing: Easing.inOut(Easing.quad) })
       ])
     ).start();
 
-    // 2. Typing Effect Logic
+    // 2. 🟢 Aura Pulsing Animation (Inner Border)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(auraAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(auraAnim, { toValue: 0.3, duration: 1500, useNativeDriver: true })
+      ])
+    ).start();
+
+    // 3. Typing Logic
     let charIndex = 0;
     const currentFullText = SCENARIOS[scenarioIndex];
-    
     const typeInterval = setInterval(() => {
       setTypingText(currentFullText.slice(0, charIndex));
       charIndex++;
-
-      // When finishing the sentence
       if (charIndex > currentFullText.length) {
         clearInterval(typeInterval);
-        
-        // Wait 2 seconds, then switch to next scenario
-        setTimeout(() => {
-           setScenarioIndex((prev) => (prev + 1) % SCENARIOS.length);
-        }, 2000); 
+        setTimeout(() => setScenarioIndex((prev) => (prev + 1) % SCENARIOS.length), 2000); 
       }
-    }, 40); // Typing speed
-
+    }, 40); 
     return () => clearInterval(typeInterval);
-  }, [scenarioIndex]); // Re-run when scenario changes
+  }, [scenarioIndex]);
+
+  // 🟢 4. SMOOTH SCROLL MARQUEE LOGIC
+  useEffect(() => {
+    let animationLoop: Animated.CompositeAnimation;
+
+    const startAnimation = () => {
+      // Calculate total width of one set of items
+      const totalWidth = STEPS.length * FULL_CARD_SIZE;
+      
+      // Reset value if needed to create seamless loop
+      // We animate from 0 to -totalWidth, then reset instantly
+      scrollX.setValue(0);
+
+      animationLoop = Animated.loop(
+        Animated.timing(scrollX, {
+          toValue: -totalWidth,
+          duration: 15000, // 15 seconds for one cycle
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      
+      if (!isPaused) {
+        animationLoop.start();
+      }
+    };
+
+    startAnimation();
+
+    return () => {
+      if (animationLoop) animationLoop.stop();
+    };
+  }, [isPaused]); // Restart when unpaused
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" backgroundColor="#fff" />
+      <StatusBar style="dark" backgroundColor={THEME.bg} />
 
-      {/* --- BACKGROUND PATTERN --- */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-         <FloatingIcon name="shield-checkmark" size={100} top={100} left={-20} delay={0} />
-         <FloatingIcon name="call" size={80} top={250} right={-20} delay={1000} />
-         <FloatingIcon name="chatbubble-ellipses" size={90} bottom={200} left={20} delay={500} />
+         <FloatingIcon name="shield-checkmark" size={120} top={80} left={-30} delay={0} />
+         <FloatingIcon name="call" size={90} top={300} right={-20} delay={1000} />
+         <FloatingIcon name="analytics" size={100} bottom={150} left={20} delay={500} />
       </View>
 
-      {/* --- 4. PASS PHOTO & ROUTER TO HEADER --- */}
       <HeaderComponent router={router} userPhoto={userPhoto} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         
-        {/* HERO SECTION */}
+        {/* HERO */}
         <Text style={styles.headline}>
-          The all-new <Text style={{color: '#0056D2'}}>Assistant</Text>{'\n'}screens calls for you.
+          Intelligent Call{'\n'}
+          <Text style={{color: THEME.accent}}>Screening & Defense</Text>
         </Text>
         
-        <View style={styles.tag}>
-          <Ionicons name="gift-outline" size={14} color="#00695C" style={{marginRight: 5}} />
-          <Text style={styles.tagText}>14 DAYS FREE TRIAL</Text>
+        <View style={styles.premiumTag}>
+          <LinearGradient colors={['#10B981', '#059669']} style={styles.tagGradient} start={{x:0, y:0}} end={{x:1, y:0}}>
+             <Ionicons name="shield-checkmark" size={12} color="#FFF" style={{marginRight: 6}} />
+             <Text style={styles.tagText}>ACTIVE PROTECTION</Text>
+          </LinearGradient>
         </View>
 
-        {/* --- ANIMATED PHONE --- */}
+        {/* --- LUXURY PHONE MOCKUP --- */}
         <Animated.View style={[styles.phoneMockup, { transform: [{ translateY: phoneFloat }] }]}>
           <View style={styles.screen}>
             
-            {/* 1. Header Layout Fixed here with flex:1 */}
+            {/* 🟢 AURA LIGHT (Inner Border Glow) */}
+            <Animated.View style={[styles.auraBorder, { opacity: auraAnim }]} pointerEvents="none" />
+
+            {/* Header Layout */}
             <View style={styles.incomingCallHeader}>
-               <Ionicons name="person-circle" size={42} color="#fff" />
+               <View style={styles.callerIcon}>
+                  <Ionicons name="person" size={24} color="#FFF" />
+               </View>
                <View style={styles.headerTextContainer}>
-                 <Text style={styles.callerName} numberOfLines={1}>Unknown Caller</Text>
-                 <Text style={styles.callerStatus}>Likely Spam • Scanning...</Text>
+                 <Text style={styles.callerName} numberOfLines={1}>Potential Spam</Text>
+                 <Text style={styles.callerStatus}>Assistant is listening...</Text>
                </View>
             </View>
             
+            {/* Chat Bubble */}
             <View style={styles.chatArea}>
-               {/* Assistant Message */}
                <View style={styles.assistantBubble}>
-                 <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
-                    <Ionicons name="logo-android" size={12} color="#0056D2" />
-                    <Text style={{fontSize: 10, color: '#0056D2', fontWeight: 'bold', marginLeft: 4}}>AI Assistant Screening</Text>
+                 <View style={styles.bubbleHeader}>
+                    <Ionicons name="logo-android" size={14} color={THEME.accent} />
+                    <Text style={styles.bubbleTitle}>QCall Assistant</Text>
                  </View>
-                 <Text style={{fontSize: 13, color: '#333', lineHeight: 18}}>
-                   {typingText}<Text style={{color: '#0056D2'}}>|</Text>
+                 <Text style={styles.bubbleText}>
+                   {typingText}<Text style={{color: THEME.accent}}>|</Text>
                  </Text>
                </View>
             </View>
 
-            {/* Fake Buttons */}
+            {/* Buttons */}
             <View style={styles.callActions}>
-               <View style={[styles.circleBtn, {backgroundColor: '#FF3B30'}]}>
-                 <Ionicons name="call" size={22} color="#fff" style={{transform: [{rotate: '135deg'}]}} />
+               <View style={[styles.circleBtn, {backgroundColor: '#FF453A'}]}>
+                 <Ionicons name="close" size={24} color="#fff" />
                </View>
-               <View style={[styles.circleBtn, {backgroundColor: '#34C759'}]}>
-                 <Ionicons name="call" size={22} color="#fff" />
+               <View style={[styles.circleBtn, {backgroundColor: '#30D158'}]}>
+                 <Ionicons name="checkmark" size={24} color="#fff" />
                </View>
             </View>
           </View>
         </Animated.View>
 
-        {/* FEATURE LIST */}
+        {/* FEATURE CARDS (Glassy) */}
         <View style={styles.featuresCard}>
-          <FeatureItem text="AI answers calls on your behalf" icon="mic-outline" />
-          <FeatureItem text="Real-time live transcript of the call" icon="document-text-outline" />
-          <FeatureItem text="Filter out spam & robo-callers" icon="shield-checkmark-outline" />
-          <FeatureItem text="Custom greeting messages" icon="chatbubbles-outline" />
+          <FeatureItem text="Auto-screens unknown numbers" icon="git-network-outline" />
+          <FeatureItem text="Live real-time transcription" icon="text-outline" />
+          <FeatureItem text="Blocks robocalls instantly" icon="ban-outline" />
         </View>
 
-        {/* --- CALL TO ACTION --- */}
+        {/* --- SMOOTH MARQUEE SCROLL SECTION --- */}
+        <View style={styles.sectionHeader}>
+           <Text style={styles.sectionTitle}>How It Works</Text>
+           <View style={styles.liveBadge}>
+               <View style={styles.liveDot} />
+               <Text style={styles.liveText}>LIVE</Text>
+           </View>
+        </View>
+
+        {/* 🟢 MARQUEE CONTAINER */}
+        <View style={{height: 190, marginBottom: 30}}>
+            {/* Touch to pause wrapper */}
+            <Pressable 
+                onPressIn={() => setIsPaused(true)} 
+                onPressOut={() => setIsPaused(false)}
+                style={{flex: 1}}
+            >
+                <Animated.View style={{ 
+                    flexDirection: 'row', 
+                    paddingHorizontal: 14, 
+                    transform: [{ translateX: scrollX }] // Moves the whole row
+                }}>
+                    {MARQUEE_DATA.map((item, index) => (
+                        <View key={`${item.id}-${index}`} style={styles.stepCard}>
+                            <View style={[styles.stepIconBox, { backgroundColor: `${item.color}15` }]}>
+                                <Ionicons name={item.icon as any} size={24} color={item.color} />
+                            </View>
+                            <Text style={styles.stepTitle}>{item.title}</Text>
+                            <Text style={styles.stepDesc}>{item.desc}</Text>
+                        </View>
+                    ))}
+                </Animated.View>
+            </Pressable>
+        </View>
+
+        {/* --- CTA --- */}
         <TouchableOpacity activeOpacity={0.8} style={styles.ctaContainer}>
           <LinearGradient
-            colors={['#0087FF', '#0056D2']}
+            colors={[THEME.primary, '#334155']}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+            end={{ x: 1, y: 1 }}
             style={styles.button}
           >
-            <Text style={styles.btnText}>START FREE TRIAL</Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" style={{marginLeft: 8}} />
+            <Text style={styles.btnText}>ACTIVATE ASSISTANT</Text>
+            <View style={styles.btnIcon}>
+                <Ionicons name="arrow-forward" size={18} color={THEME.primary} />
+            </View>
           </LinearGradient>
-          <Text style={styles.cancelText}>No credit card required • Cancel anytime</Text>
+          <Text style={styles.cancelText}>Included with Premium Plan</Text>
         </TouchableOpacity>
-
-        {/* --- EXTRA CONTENT (SCROLLABLE) --- */}
-        <View style={styles.sectionHeader}>
-           <Text style={styles.sectionTitle}>How it works</Text>
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.stepsScroll}>
-           <StepCard 
-             num="1" 
-             title="You Decline" 
-             desc="Reject the call or let it ring. The Assistant picks up automatically." 
-             color="#E3F2FD" 
-           />
-           <StepCard 
-             num="2" 
-             title="AI Speaks" 
-             desc="Our AI asks the caller who they are and why they are calling." 
-             color="#E8F5E9" 
-           />
-           <StepCard 
-             num="3" 
-             title="You Decide" 
-             desc="Read the live transcript and decide to pick up or block." 
-             color="#FFF3E0" 
-           />
-        </ScrollView>
 
         <View style={{height: 100}} /> 
       </ScrollView>
@@ -257,92 +315,90 @@ export default function AssistScreen() {
 const FeatureItem = ({text, icon}: {text: string, icon: any}) => (
   <View style={styles.featureRow}>
     <View style={styles.iconCircle}>
-       <Ionicons name={icon} size={18} color="#0056D2" />
+       <Ionicons name={icon} size={18} color={THEME.accent} />
     </View>
     <Text style={styles.featureText}>{text}</Text>
   </View>
 );
 
-const StepCard = ({num, title, desc, color}: any) => (
-  <View style={[styles.stepCard, {backgroundColor: color}]}>
-     <Text style={styles.stepNum}>{num}</Text>
-     <Text style={styles.stepTitle}>{title}</Text>
-     <Text style={styles.stepDesc}>{desc}</Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
+  safeArea: { flex: 1, backgroundColor: THEME.bg },
   
   // Header
-  headerContainer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, backgroundColor: '#fff', zIndex: 10 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.searchBarBg, borderRadius: 30, paddingHorizontal: 10, height: 50 },
-  profileIconLeft: { marginRight: 10 },
-  avatarImage: { width: 32, height: 32, borderRadius: 16 },
-  searchInput: { flex: 1, fontSize: 16, color: '#000' },
-  searchRightIcons: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  iconButton: { padding: 5 },
+  headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.bg },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerDate: { fontSize: 13, color: THEME.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  headerTitle: { fontSize: 34, fontWeight: '900', color: THEME.primary, letterSpacing: -1 },
+  profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
+  avatarImage: { width: 48, height: 48, borderRadius: 18, borderWidth: 2, borderColor: '#FFF' },
+  avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: THEME.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
+  searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.textMain, fontWeight: '500' },
 
-  content: { padding: 20, alignItems: 'center', paddingBottom: 40 },
+  content: { paddingHorizontal: 24, alignItems: 'center' },
   
-  headline: { fontSize: 28, fontWeight: '800', textAlign: 'center', marginBottom: 10, color: '#1A1A1A', letterSpacing: -0.5 },
+  headline: { fontSize: 32, fontWeight: '800', textAlign: 'center', marginBottom: 15, color: THEME.primary, letterSpacing: -1, lineHeight: 38 },
   
-  tag: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0F2F1', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginBottom: 30 },
-  tagText: { color: '#00695C', fontWeight: 'bold', fontSize: 12, letterSpacing: 0.5 },
+  premiumTag: { marginBottom: 35, shadowColor: THEME.success, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5 },
+  tagGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12 },
+  tagText: { color: '#FFF', fontWeight: '800', fontSize: 11, letterSpacing: 1 },
   
-  // Phone Mockup
+  // Phone
   phoneMockup: { 
-    width: 210, height: 400, backgroundColor: '#1A1A1A', borderRadius: 30, padding: 10, marginBottom: 30,
-    shadowColor: '#0056D2', shadowOpacity: 0.25, shadowRadius: 20, elevation: 10, borderWidth: 4, borderColor: '#333'
+    width: 240, height: 460, backgroundColor: '#0F172A', borderRadius: 36, padding: 12, marginBottom: 40,
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 30, elevation: 20, borderWidth: 6, borderColor: '#1E293B'
   },
-  screen: { flex: 1, backgroundColor: '#4A90E2', borderRadius: 20, padding: 15, justifyContent: 'space-between', overflow: 'hidden' },
+  screen: { flex: 1, backgroundColor: '#1E293B', borderRadius: 24, padding: 16, justifyContent: 'space-between', overflow: 'hidden' },
   
-  // FIXED HEADER LAYOUT
-  incomingCallHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginTop: 15,
-    width: '100%' // Ensure full width
+  // 🟢 AURA BORDER (Inner Glow)
+  auraBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: THEME.aura, // Electric Blue Glow
+    zIndex: 2
   },
-  headerTextContainer: {
-    marginLeft: 12,
-    flex: 1, // Fixes the layout issue by taking remaining space
-  },
-  callerName: {
-    color: 'white', 
-    fontWeight: 'bold', 
-    fontSize: 16,
-    marginBottom: 2
-  },
-  callerStatus: {
-    color: 'rgba(255,255,255,0.8)', 
-    fontSize: 12
-  },
+
+  incomingCallHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 20, width: '100%' },
+  callerIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  headerTextContainer: { marginLeft: 14, flex: 1 },
+  callerName: { color: 'white', fontWeight: '700', fontSize: 18, marginBottom: 4 },
+  callerStatus: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500' },
 
   chatArea: { flex: 1, justifyContent: 'center' },
-  assistantBubble: { backgroundColor: 'white', padding: 15, borderRadius: 16, borderTopLeftRadius: 4, width: '100%', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5 },
+  assistantBubble: { backgroundColor: '#FFF', padding: 16, borderRadius: 20, borderTopLeftRadius: 4, width: '100%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
+  bubbleHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  bubbleTitle: { fontSize: 11, color: THEME.accent, fontWeight: '800', marginLeft: 6, textTransform: 'uppercase' },
+  bubbleText: { fontSize: 15, color: '#334155', lineHeight: 22, fontWeight: '500' },
   
-  callActions: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 15 },
-  circleBtn: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3 },
+  callActions: { flexDirection: 'row', justifyContent: 'space-evenly', marginBottom: 10 },
+  circleBtn: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 5 },
 
   // Features
-  featuresCard: { width: '100%', backgroundColor: '#FAFAFA', borderRadius: 20, padding: 20, marginBottom: 30, borderWidth: 1, borderColor: '#F0F0F0' },
-  featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  iconCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  featureText: { fontSize: 15, color: '#444', fontWeight: '500', flex: 1 },
+  featuresCard: { width: '100%', backgroundColor: '#FFF', borderRadius: 24, padding: 24, marginBottom: 40, borderWidth: 1, borderColor: THEME.border, shadowColor: '#2563EB', shadowOpacity: 0.05, shadowRadius: 15, elevation: 2 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  iconCircle: { width: 36, height: 36, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  featureText: { fontSize: 15, color: '#334155', fontWeight: '600', flex: 1 },
+
+  // Marquee Steps
+  sectionHeader: { width: '100%', flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal: 4, marginBottom: 20 },
+  sectionTitle: { fontSize: 22, fontWeight: '800', color: THEME.primary, letterSpacing: -0.5 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: THEME.success, marginRight: 6 },
+  liveText: { color: THEME.success, fontSize: 10, fontWeight: '700' },
+
+  stepCard: { 
+    width: CARD_WIDTH, height: 180, backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginRight: CARD_MARGIN, 
+    justifyContent: 'space-between', borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 10, elevation: 3 
+  },
+  stepIconBox: { width: 44, height: 44, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  stepTitle: { fontSize: 16, fontWeight: '700', color: THEME.primary, marginTop: 12 },
+  stepDesc: { fontSize: 13, color: THEME.textSub, lineHeight: 18, fontWeight: '500' },
 
   // CTA
-  ctaContainer: { width: '100%', alignItems: 'center', marginBottom: 40 },
-  button: { width: '100%', paddingVertical: 18, borderRadius: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', shadowColor: '#0087FF', shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 },
-  btnText: { color: 'white', fontWeight: 'bold', fontSize: 16, letterSpacing: 1 },
-  cancelText: { marginTop: 12, color: '#999', fontSize: 12 },
-
-  // Steps Section
-  sectionHeader: { width: '100%', paddingHorizontal: 10, marginBottom: 15 },
-  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#1A1A1A' },
-  stepsScroll: { width: '100%', paddingLeft: 5 },
-  stepCard: { width: 140, height: 160, borderRadius: 20, padding: 15, marginRight: 15, justifyContent: 'space-between' },
-  stepNum: { fontSize: 32, fontWeight: '900', color: 'rgba(0,0,0,0.1)' },
-  stepTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  stepDesc: { fontSize: 12, color: '#666', lineHeight: 16 },
+  ctaContainer: { width: '100%', alignItems: 'center', marginBottom: 50 },
+  button: { width: '100%', paddingVertical: 18, paddingHorizontal: 24, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: THEME.primary, shadowOpacity: 0.3, shadowRadius: 15, elevation: 10 },
+  btnText: { color: '#FFF', fontWeight: '800', fontSize: 15, letterSpacing: 1 },
+  btnIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  cancelText: { marginTop: 14, color: THEME.textSub, fontSize: 13, fontWeight: '500' },
 });

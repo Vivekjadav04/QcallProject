@@ -84,7 +84,7 @@ export default function SearchScreen() {
             {loading ? (
               <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.btnText}>Check Server</Text>
+              <Text style={styles.btnText}>Check </Text>
             )}
           </TouchableOpacity>
 

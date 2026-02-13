@@ -15,8 +15,9 @@ import { useRouter, Stack } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg'; 
 import { StatusBar } from 'expo-status-bar';
 
-// 🟢 Import Redux Hook
+// 🟢 Import Hooks
 import { useAuth } from '../hooks/useAuth'; 
+import { useCustomAlert } from '../context/AlertContext';
 
 const COLORS = {
   bg: '#FFFFFF',
@@ -34,20 +35,21 @@ const COLORS = {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { showAlert } = useCustomAlert();
 
-  // 🟢 UPDATED: Calculate progress based on First/Last Name
+  // 🟢 1. PAYWALL LOGIC
+  const handlePremiumFeature = (featureName: string) => {
+    showAlert(
+        "Premium Feature", 
+        `"${featureName}" is available exclusively for Pro members.\n\nUpgrade now to unlock advanced insights and tools!`, 
+        "warning" 
+    );
+  };
+
+  // 🟢 2. PROGRESS LOGIC
   const calculateProgress = () => {
     if (!user) return 0;
-    
-    const fields = [
-      user.firstName, 
-      user.lastName, 
-      user.email, 
-      user.phoneNumber, 
-      user.profilePhoto
-    ];
-    
-    // Filter out empty or undefined fields
+    const fields = [user.firstName, user.lastName, user.email, user.phoneNumber, user.profilePhoto];
     const filled = fields.filter(f => f && f.trim().length > 0).length;
     return Math.round((filled / fields.length) * 100);
   };
@@ -67,12 +69,26 @@ export default function ProfileScreen() {
     </View>
   );
 
-  const MenuItem = ({ icon, label, isLast }: {icon: any, label: string, isLast?: boolean}) => (
-    <TouchableOpacity style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}>
-      <View style={styles.menuIconContainer}>
-        <MaterialCommunityIcons name={icon} size={24} color="#000" />
+  // 🟢 3. UPDATED MENU ITEM (With Premium Crown & OnPress)
+  const MenuItem = ({ icon, label, isLast, isPremium, onPress }: any) => (
+    <TouchableOpacity 
+        style={[styles.menuRow, isLast && { borderBottomWidth: 0 }]}
+        onPress={onPress}
+        activeOpacity={0.7}
+    >
+      <View style={styles.menuLeft}>
+          <View style={styles.menuIconContainer}>
+            <MaterialCommunityIcons name={icon} size={24} color="#333" />
+          </View>
+          <Text style={styles.menuText}>{label}</Text>
       </View>
-      <Text style={styles.menuText}>{label}</Text>
+      
+      {/* Show Crown if Premium, otherwise Arrow */}
+      {isPremium ? (
+          <MaterialCommunityIcons name="crown" size={20} color={COLORS.gold} />
+      ) : (
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#CCC" />
+      )}
     </TouchableOpacity>
   );
 
@@ -84,15 +100,8 @@ export default function ProfileScreen() {
     );
   }
 
-  // 🟢 UPDATED: Logic to construct Full Name
-  const displayName = (user?.firstName && user?.lastName) 
-    ? `${user.firstName} ${user.lastName}`
-    : user?.name || "Guest User";
-
-  // 🟢 UPDATED: Logic for Initials (First letter of First Name)
-  const initials = user?.firstName 
-    ? user.firstName.charAt(0).toUpperCase() 
-    : displayName.charAt(0).toUpperCase();
+  const displayName = (user?.firstName && user?.lastName) ? `${user.firstName} ${user.lastName}` : user?.name || "Guest User";
+  const initials = user?.firstName ? user.firstName.charAt(0).toUpperCase() : displayName.charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}> 
@@ -157,7 +166,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* PREMIUM BANNER */}
-        <TouchableOpacity style={styles.premiumBanner} onPress={() => router.push('/upgrade')}>
+        <TouchableOpacity style={styles.premiumBanner} onPress={() => handlePremiumFeature("Full Access")}>
           <View style={styles.premiumContent}>
              <MaterialCommunityIcons name="crown" size={24} color="#FFF" style={{marginRight: 10}} />
              <Text style={styles.premiumText}>Upgrade to Premium</Text>
@@ -188,13 +197,41 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* MENU LIST */}
+        {/* 🟢 4. WIRED MENU LIST */}
         <View style={styles.menuList}>
-           <MenuItem icon="shield-off-outline" label="Manage blocking" />
-           <MenuItem icon="email-outline" label="Inbox cleaner" />
-           <MenuItem icon="face-man-profile" label="Who viewed my profile" />
-           <MenuItem icon="magnify" label="Who searched for me" />
-           <MenuItem icon="account-box-multiple-outline" label="Contact requests" isLast />
+            {/* Real Navigation */}
+            <MenuItem 
+                icon="shield-off-outline" 
+                label="Manage blocking" 
+                onPress={() => router.push('/blocked-list')} 
+            />
+            
+            {/* Premium Features */}
+            <MenuItem 
+                icon="email-outline" 
+                label="Inbox cleaner" 
+                isPremium={true}
+                onPress={() => handlePremiumFeature("Inbox Cleaner")} 
+            />
+            <MenuItem 
+                icon="face-man-profile" 
+                label="Who viewed my profile" 
+                isPremium={true}
+                onPress={() => handlePremiumFeature("Profile Views")} 
+            />
+            <MenuItem 
+                icon="magnify" 
+                label="Who searched for me" 
+                isPremium={true}
+                onPress={() => handlePremiumFeature("Search Insights")} 
+            />
+            <MenuItem 
+                icon="account-box-multiple-outline" 
+                label="Contact requests" 
+                isLast 
+                isPremium={true}
+                onPress={() => handlePremiumFeature("Contact Requests")} 
+            />
         </View>
 
       </ScrollView>
@@ -272,8 +309,9 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 18, fontWeight: 'bold' },
   statLabel: { fontSize: 12, color: COLORS.textGrey },
   
-  menuList: { marginHorizontal: 16, borderWidth: 1, borderColor: '#F0F0F0', borderRadius: 12, backgroundColor: '#FFF', overflow: 'hidden' },
-  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  menuList: { marginHorizontal: 16, borderWidth: 1, borderColor: '#F0F0F0', borderRadius: 12, backgroundColor: '#FFF', overflow: 'hidden', elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  menuLeft: { flexDirection: 'row', alignItems: 'center' },
   menuIconContainer: { width: 40 },
-  menuText: { fontSize: 16, color: '#333' },
+  menuText: { fontSize: 16, color: '#333', fontWeight: '500' },
 });

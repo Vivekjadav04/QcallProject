@@ -3,9 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { API_BASE_URL } from '../constants/config';
 
-// Define the shape of our new "Secure" context
+// 🟢 UPDATED: Define the shape of our context with unblockNumber
 interface SecureOperationsType {
   blockNumber: (number: string, alsoReport: boolean) => Promise<boolean>;
+  unblockNumber: (number: string) => Promise<boolean>; // Added this
   reportSpam: (number: string, category: string) => Promise<boolean>;
   markAsSafe: (number: string) => Promise<boolean>;
   getPrivateProfile: (number: string) => Promise<any>;
@@ -16,12 +17,8 @@ const SecureOperationsContext = createContext<SecureOperationsType | undefined>(
 export const SecureOperationsProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔒 HELPER: The "Key Fetcher"
-  // This reads the token FRESH every time you click a button.
-  // It ensures we never use a stale or missing token.
   const getAuthHeaders = async () => {
     try {
-      // We look for 'user_token' (saved by your Login flow) OR 'token' (saved by other flows)
-      // This covers all bases so it "just works"
       const t1 = await AsyncStorage.getItem('user_token');
       const t2 = await AsyncStorage.getItem('token');
       const finalToken = t1 || t2;
@@ -62,6 +59,35 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
       return false;
     } catch (e) {
       Alert.alert("Error", "Network request failed");
+      return false;
+    }
+  };
+
+  // 🟢 FEATURE 1.5: UNBLOCK (The New Sync Logic)
+  const unblockNumber = async (number: string) => {
+    const headers = await getAuthHeaders();
+    if (!headers) {
+      Alert.alert("Authentication Required", "Please log in to unblock.");
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/contacts/unblock`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ number }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        return true;
+      } else {
+        console.warn("[SecureOps] Unblock failed:", data.message);
+        return false;
+      }
+    } catch (e) {
+      console.error("[SecureOps] Network error during unblock:", e);
       return false;
     }
   };
@@ -114,11 +140,8 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
   };
 
   // 🔵 FEATURE 4: GET PROFILE (With Auth)
-  // Use this if you want to see private info that requires login
   const getPrivateProfile = async (number: string) => {
     try {
-      // This route is usually public, but we can pass headers just in case
-      // needed for future "Friends Only" features
       const response = await fetch(`${API_BASE_URL}/contacts/identify?number=${number}`);
       return await response.json();
     } catch (e) {
@@ -127,13 +150,18 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
   };
 
   return (
-    <SecureOperationsContext.Provider value={{ blockNumber, reportSpam, markAsSafe, getPrivateProfile }}>
+    <SecureOperationsContext.Provider value={{ 
+        blockNumber, 
+        unblockNumber, // Added to Provider
+        reportSpam, 
+        markAsSafe, 
+        getPrivateProfile 
+    }}>
       {children}
     </SecureOperationsContext.Provider>
   );
 };
 
-// Hook to use it easily
 export const useSecureOps = () => {
   const context = useContext(SecureOperationsContext);
   if (!context) throw new Error("useSecureOps must be used within SecureOperationsProvider");

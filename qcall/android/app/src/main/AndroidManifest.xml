@@ -18,9 +18,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>
+    
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+    
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 
     <application
         android:name=".MainApplication"
@@ -32,8 +35,34 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        
         android:enableOnBackInvokedCallback="false">
+
+        <service
+            android:name=".native_telephony.QCallScreeningService"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService"/>
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".native_telephony.QCallInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true"
+            android:foregroundServiceType="phoneCall">
+            <intent-filter>
+                <action android:name="android.telecom.InCallService"/>
+            </intent-filter>
+            
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true"/>
+            
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+                android:value="false"/> 
+        </service>
 
         <activity
             android:name=".new_overlay.CallerIdActivity"
@@ -72,22 +101,6 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:exported="false" />
-
-        <service
-            android:name=".native_telephony.QCallInCallService"
-            android:permission="android.permission.BIND_INCALL_SERVICE"
-            android:exported="true"
-            android:foregroundServiceType="phoneCall">
-            <intent-filter>
-                <action android:name="android.telecom.InCallService"/>
-            </intent-filter>
-            <meta-data
-                android:name="android.telecom.IN_CALL_SERVICE_UI"
-                android:value="true"/>
-            <meta-data
-                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
-                android:value="true"/>
-        </service>
 
         <receiver
             android:name=".native_telephony.NotificationActionReceiver"

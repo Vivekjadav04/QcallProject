@@ -1,147 +1,229 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-// ❌ REMOVED: Alert
 import { useRouter, Stack } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-// 🟢 UPDATED: Import Redux Hook
 import { useAuth } from '../hooks/useAuth';
-// 🟢 IMPORT CUSTOM ALERT HOOK
 import { useCustomAlert } from '../context/AlertContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  
-  // 🟢 UPDATED: Use Redux Logout
   const { logout } = useAuth();
-  
-  // 🟢 HOOK THE ALERT SYSTEM
   const { showAlert } = useCustomAlert();
 
-  const handleLogout = async () => {
-    // 🟢 REPLACED: Use High-Def Alert
-    // We treat this as a "Warning" type to show the orange color scheme
+  // 🟢 1. LOGOUT LOGIC
+  const handleLogout = () => {
     showAlert(
       "Log Out", 
-      "Are you sure you want to log out?", 
+      "Are you sure you want to log out of QCall?", 
       "warning", 
-      () => {
-        // 🟢 THIS ACTION RUNS WHEN USER CLICKS "OKAY"
-        // Since CustomAlert currently only has one button ("Okay"), 
-        // this acts as the confirmation.
-        // For a true "Cancel/Confirm" dialog, we would need to update CustomAlert,
-        // but for now, clicking the button proceeds.
-        logout(); 
-      }
+      () => logout() 
     );
   };
 
-  const SettingItem = ({ icon, label, color = "#333", onPress }: any) => (
-    <TouchableOpacity style={styles.itemRow} onPress={onPress}>
-        <View style={styles.left}>
-          <MaterialCommunityIcons name={icon} size={24} color={color} />
-          <Text style={[styles.label, { color }]}>{label}</Text>
+  // 🟢 2. PLACEHOLDER FOR PENDING TASKS
+  // This makes the app feel "finished" even if features aren't code yet.
+  const handleComingSoon = (featureName: string) => {
+    showAlert(
+        "Coming Soon", 
+        `${featureName} is currently under development and will be available in the next update.`, 
+        "success" // Using green to make it feel positive
+    );
+  };
+
+  // 🟢 3. REUSABLE SETTING ROW COMPONENT
+  const SettingRow = ({ icon, color, label, subtext, onPress, isDestructive = false }: any) => (
+    <TouchableOpacity 
+        style={styles.row} 
+        onPress={onPress} 
+        activeOpacity={0.7}
+    >
+        {/* Icon Container */}
+        <View style={[styles.iconContainer, { backgroundColor: isDestructive ? '#FEE2E2' : `${color}15` }]}>
+            <Feather name={icon} size={20} color={isDestructive ? '#EF4444' : color} />
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#CCC" />
+
+        {/* Text */}
+        <View style={styles.textContainer}>
+            <Text style={[styles.label, isDestructive && { color: '#EF4444' }]}>{label}</Text>
+            {subtext && <Text style={styles.subtext}>{subtext}</Text>}
+        </View>
+
+        {/* Chevron */}
+        {!isDestructive && <Feather name="chevron-right" size={20} color="#CBD5E1" />}
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
       <Stack.Screen options={{ headerShown: false }} />
       
-      {/* CUSTOM HEADER */}
-      <View style={styles.customHeader}>
-         <TouchableOpacity 
-           onPress={() => router.back()} 
-           style={styles.headerIcon}
-         >
-            <Ionicons name="arrow-back" size={24} color="black" />
+      {/* HEADER */}
+      <View style={styles.header}>
+         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Feather name="arrow-left" size={24} color="#1E293B" />
          </TouchableOpacity>
-         
          <Text style={styles.headerTitle}>Settings</Text>
-         
-         <View style={{ width: 40 }} /> 
+         <View style={{width: 40}} /> 
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <SettingItem icon="cog-outline" label="General" />
-        <SettingItem icon="volume-high" label="Sounds" />
-        <SettingItem icon="web" label="App Language" />
-        <SettingItem icon="card-account-phone-outline" label="Caller ID" />
-        <SettingItem icon="phone-outline" label="Calling" />
-        <SettingItem icon="database-outline" label="Data & Storage" />
-        <SettingItem icon="message-text-outline" label="Messaging" />
-        <SettingItem icon="shield-alert-outline" label="Block" />
-        <SettingItem icon="palette-outline" label="Appearance" />
-        <SettingItem icon="cloud-upload-outline" label="Backup" />
-        <SettingItem icon="lock-outline" label="Privacy Center" />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        <SettingItem icon="information-outline" label="About" />
+        {/* SECTION 1: ESSENTIALS */}
+        <Text style={styles.sectionHeader}>GENERAL</Text>
+        <View style={styles.card}>
+            <SettingRow 
+                icon="shield" 
+                color="#EF4444" 
+                label="Block Manager" 
+                subtext="Manage blocked numbers"
+                onPress={() => router.push('/blocked-list')} // 🟢 Wired to Real Screen
+            />
+            <View style={styles.divider} />
+            <SettingRow 
+                icon="user" 
+                color="#3B82F6" 
+                label="Caller ID" 
+                subtext="Identification settings"
+                onPress={() => handleComingSoon("Caller ID Settings")} 
+            />
+        </View>
 
-        <View style={styles.divider} />
+        {/* SECTION 2: PREFERENCES */}
+        <Text style={styles.sectionHeader}>PREFERENCES</Text>
+        <View style={styles.card}>
+            <SettingRow 
+                icon="moon" 
+                color="#8B5CF6" 
+                label="Appearance" 
+                subtext="Dark mode & themes"
+                onPress={() => handleComingSoon("Theme Selection")} 
+            />
+            <View style={styles.divider} />
+            <SettingRow 
+                icon="bell" 
+                color="#F59E0B" 
+                label="Notifications" 
+                subtext="Ringtones & vibrations"
+                onPress={() => handleComingSoon("Sound Settings")} 
+            />
+            <View style={styles.divider} />
+            <SettingRow 
+                icon="lock" 
+                color="#10B981" 
+                label="Privacy & Security" 
+                subtext="App lock & permissions"
+                onPress={() => handleComingSoon("Privacy Center")} 
+            />
+        </View>
 
-        {/* LOGOUT BUTTON */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <MaterialCommunityIcons name="logout" size={24} color="#D32F2F" />
-            <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
+        {/* SECTION 3: SUPPORT */}
+        <Text style={styles.sectionHeader}>SUPPORT</Text>
+        <View style={styles.card}>
+            <SettingRow 
+                icon="info" 
+                color="#64748B" 
+                label="About QCall" 
+                onPress={() => handleComingSoon("About Page")} 
+            />
+            <View style={styles.divider} />
+            <SettingRow 
+                icon="star" 
+                color="#64748B" 
+                label="Rate Us" 
+                onPress={() => handleComingSoon("Rating")} 
+            />
+        </View>
 
-        <Text style={styles.versionText}>Version 1.0.0</Text>
+        {/* LOGOUT */}
+        <View style={[styles.card, { marginTop: 20 }]}>
+            <SettingRow 
+                icon="log-out" 
+                color="#EF4444" 
+                label="Log Out" 
+                isDestructive={true}
+                onPress={handleLogout} 
+            />
+        </View>
+
+        <Text style={styles.versionText}>QCall v1.0.0 (Beta)</Text>
         <View style={{height: 40}} />
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' }, // Slate-50 background
   
-  customHeader: {
-    height: 56,
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#F8FAFC',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1A1A1A',
-  },
-  headerIcon: {
-    padding: 8,
+  backBtn: { padding: 8, marginLeft: -8 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
+
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+
+  sectionHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+    marginBottom: 10,
+    marginTop: 25,
+    letterSpacing: 1,
   },
 
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5'
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 15 },
-  label: { fontSize: 16, fontWeight: '500' },
-  
-  divider: { height: 20, backgroundColor: '#F9F9F9' },
-  
-  logoutBtn: {
+
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
+  },
+  
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 10,
-    marginTop: 10
+    alignItems: 'center',
+    marginRight: 15,
   },
-  logoutText: { color: '#D32F2F', fontSize: 18, fontWeight: 'bold' },
-  versionText: { textAlign: 'center', color: '#AAA', marginBottom: 30, fontSize: 12 }
+  
+  textContainer: { flex: 1 },
+  label: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
+  subtext: { fontSize: 13, color: '#64748B', marginTop: 2 },
+
+  divider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginLeft: 70, // Align with text, skipping icon
+  },
+
+  versionText: {
+    textAlign: 'center',
+    color: '#CBD5E1',
+    marginTop: 30,
+    fontSize: 12,
+    fontWeight: '600'
+  }
 });

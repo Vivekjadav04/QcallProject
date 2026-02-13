@@ -7,7 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings // 🟢 ADDED THIS IMPORT
+import android.provider.Settings 
 import android.telecom.TelecomManager
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
@@ -15,6 +15,7 @@ import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.rkgroup.qcall.native_telephony.QCallInCallService
 import com.rkgroup.qcall.helpers.NotificationHelper 
+import com.rkgroup.qcall.helpers.BlockDataBridge // 🟢 Added for SharedPreferences sync
 import com.rkgroup.qcall.new_overlay.CallerIdActivity 
 
 class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -42,6 +43,23 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     }
 
     override fun getName(): String = "CallManagerModule"
+
+    // 🟢 NEW: Sync Block Status to SharedPreferences
+    @ReactMethod
+    fun syncBlockToNative(number: String, isBlocked: Boolean) {
+        BlockDataBridge.syncBlockStatus(reactApplicationContext, number, isBlocked)
+    }
+
+    // 🧪 TESTING METHOD: Check SharedPreferences from React Native
+    @ReactMethod
+    fun isNumberBlockedNative(number: String, promise: Promise) {
+        try {
+            val status = BlockDataBridge.isNumberBlocked(reactApplicationContext, number)
+            promise.resolve(status)
+        } catch (e: Exception) {
+            promise.reject("PREFS_ERROR", e.message)
+        }
+    }
 
     @ReactMethod
     fun answerCall() {
@@ -77,21 +95,19 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         QCallInCallService.toggleSpeaker(on)
     }
 
-    // 🟢 NEW: Check Overlay Permission
     @ReactMethod
     fun checkOverlayPermission(promise: Promise) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 promise.resolve(Settings.canDrawOverlays(reactApplicationContext))
             } else {
-                promise.resolve(true) // Not needed below Android 6
+                promise.resolve(true)
             }
         } catch (e: Exception) {
             promise.resolve(false)
         }
     }
 
-    // 🟢 NEW: Open Overlay Settings Page
     @ReactMethod
     fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

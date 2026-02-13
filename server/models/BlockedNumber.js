@@ -11,7 +11,6 @@ const BlockedNumberSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  // Optional: Allows users to note why they blocked it (e.g., "Spam", "Personal")
   reason: { 
     type: String, 
     default: "User Blocked" 
@@ -22,9 +21,7 @@ const BlockedNumberSchema = new mongoose.Schema({
   }
 });
 
-// 🚀 PERFORMANCE INDEX
-// 1. Ensures a user can't block the same number twice.
-// 2. Makes searching "Is this number blocked?" extremely fast.
+// 🚀 Allows unique, lightning-fast queries for (User + Number)
 BlockedNumberSchema.index({ user: 1, phoneNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model('BlockedNumber', BlockedNumberSchema);

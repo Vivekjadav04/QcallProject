@@ -4,94 +4,99 @@ const GlobalNumber = require('../models/GlobalNumber');
 const SpamReport = require('../models/SpamReport');
 const BlockedNumber = require('../models/BlockedNumber'); 
 
-// Helper: Clean phone numbers (+91-987... -> 91987...)
+// ⚙️ SETTINGS: Change this number to control sensitivity
+const SPAM_THRESHOLD = 50; // Number needs 50 reports to be marked "Spam"
+
+// Helper: Clean phone numbers
 const normalizeNumber = (num) => num ? num.replace(/[^\d+]/g, '') : '';
 
-// 🟢 1. IDENTIFY CALLER (The "Nuclear" Regex Logic)
+// 🟢 1. IDENTIFY CALLER (Updated with Threshold Logic)
 exports.identifyCaller = async (req, res) => {
   try {
     const rawNum = req.query.number;
-    // Remove all non-numeric chars to get pure digits for length check
     const cleanNum = rawNum ? rawNum.replace(/[^\d]/g, '') : '';
     
     if (!cleanNum || cleanNum.length < 10) { 
         return res.status(400).json({ msg: "Invalid number" });
     }
 
-    // 1. GET THE FINGERPRINT (Last 10 Digits)
     const last10 = cleanNum.slice(-10);
-    
-    // 🔍 SEARCH LOGIC: Find any number that CONTAINS these 10 digits
     const searchCriteria = { phoneNumber: { $regex: last10, $options: 'i' } };
 
-    // 2. PARALLEL SEARCH (Global, User, Spam)
-    const [spamReports, appUser, globalEntry] = await Promise.all([
-        SpamReport.find(searchCriteria), // Find ALL matching reports
+    // Optimize: Use countDocuments instead of find() for speed
+    const [spamCount, appUser, globalEntry] = await Promise.all([
+        SpamReport.countDocuments(searchCriteria), 
         User.findOne(searchCriteria),
         GlobalNumber.findOne(searchCriteria)
     ]);
 
-    // 3. PRIORITY LOGIC (The "Override")
+    // 🚀 NEW LOGIC: Only mark as SPAM if reports exceed threshold or Global DB says so
+    // We calculate a percentage score based on the threshold
+    let spamScore = 0;
+    if (spamCount >= SPAM_THRESHOLD) spamScore = 100;
+    else if (spamCount > 0) spamScore = Math.floor((spamCount / SPAM_THRESHOLD) * 100);
 
-    // ➤ STEP A: CHECK SPAM (Force Red Screen)
-    const spamCount = spamReports.length;
-    const isGlobalSpam = globalEntry && globalEntry.spamScore >= 10;
-    
-    // IF FOUND IN SPAM REPORTS -> IT IS RED. NO EXCEPTIONS.
-    if (spamCount > 0 || isGlobalSpam) {
-        
-        // 🧠 NAME RECOVERY: Get the best name available
-        let bestName = "Likely Spam"; // Default
-        
-        // If Global has a name, STEAL IT for the Red Screen (e.g. "Fake Bank Agent")
+    // Override if Global Entry has a locked-in high score
+    if (globalEntry && globalEntry.spamScore > spamScore) {
+        spamScore = globalEntry.spamScore;
+    }
+
+    const isSpam = spamScore >= 80; // Only RED if score is very high
+
+    if (isSpam || spamCount > 0) {
+        let bestName = "Unknown Caller";
+        let type = "UNKNOWN";
+
+        if (isSpam) {
+            bestName = "Likely Spam";
+            type = "SPAM";
+        }
+
         if (globalEntry && globalEntry.likelyName) {
             bestName = globalEntry.likelyName;
         } 
-        // If it's a User but also Spam, use their name
         else if (appUser) {
             bestName = `${appUser.firstName} ${appUser.lastName}`;
+            type = "USER";
         }
 
         return res.json({
             found: true,
-            type: "SPAM",           // 🚨 FORCE RED SCREEN
-            name: bestName,         // Shows the name we found
-            isSpam: true,
+            type: type,
+            name: bestName,
+            isSpam: isSpam, // Boolean based on threshold
+            spamScore: spamScore, // 0-100
             spamReports: spamCount,
             location: globalEntry?.location || "",
-            spamType: globalEntry?.tags?.[0] || "Reported Spam"
+            spamType: globalEntry?.tags?.[0] || (isSpam ? "High Risk" : "Reports")
         });
     }
 
-    // ➤ STEP B: CHECK USER (Blue Screen)
     if (appUser) {
         if (appUser.settings?.showCallerID === false) {
              return res.json({ found: false, type: "PRIVATE", name: "Private Number" });
         }
         return res.json({
             found: true,
-            type: "USER",        // <--- Triggers BLUE screen
+            type: "USER",
             name: `${appUser.firstName} ${appUser.lastName}`.trim(),
             photo: appUser.profilePhoto,
             location: appUser.address ? appUser.address.city : "", 
-            designation: appUser.company ? appUser.company.title : "",
             isSpam: false,
             isVerified: true
         });
     }
 
-    // ➤ STEP C: CHECK GLOBAL (Blue Screen)
     if (globalEntry) {
         return res.json({
             found: true,
-            type: "GLOBAL",      // <--- Triggers BLUE screen
+            type: "GLOBAL",
             name: globalEntry.likelyName || "Unknown Caller",
             location: globalEntry.location || "",
             isSpam: false
         });
     }
 
-    // --- STEP D: Unknown ---
     return res.json({ found: false, type: "UNKNOWN", name: "Unknown Caller", isSpam: false });
 
   } catch (err) {
@@ -100,47 +105,40 @@ exports.identifyCaller = async (req, res) => {
   }
 };
 
-// 🟢 2. SYNC CONTACTS (With Batching & Global Updates)
+// 🟢 2. SYNC CONTACTS (Kept Same)
 exports.syncContacts = async (req, res) => {
   try {
     const { contacts } = req.body;
     const userId = req.user ? req.user.id : null; 
 
-    if (!userId) return res.status(401).json({ msg: "User ID missing. Token invalid." });
+    if (!userId) return res.status(401).json({ msg: "User ID missing." });
     if (!contacts || !Array.isArray(contacts)) return res.status(400).json({ msg: "No contacts provided" });
 
-    // A. Prepare Bulk Operations for User's Private Book
     const ops = contacts.map(c => {
       const num = normalizeNumber(c.number);
       if(!num || num.length < 5) return null;
-      
       return {
         updateOne: {
           filter: { userId: userId, phoneNumber: num }, 
-          update: { 
-              $set: { contactName: c.name, updatedAt: new Date() } 
-          },
+          update: { $set: { contactName: c.name, updatedAt: new Date() } },
           upsert: true
         }
       };
     }).filter(o => o);
 
-    if (ops.length > 0) {
-        await UserContact.bulkWrite(ops);
-    }
-
-    // B. Background Update for Global Directory
+    if (ops.length > 0) await UserContact.bulkWrite(ops);
+    
+    // Fire and forget global name updates
     contacts.forEach(c => updateGlobalName(c.number, c.name));
-
+    
     res.json({ success: true, count: ops.length });
-
   } catch (err) {
     console.error("Sync Error:", err.message);
     res.status(500).json({ msg: "Server Error" });
   }
 };
 
-// 🟢 3. REPORT SPAM (Full Logic)
+// 🟢 3. REPORT SPAM (The "Ballot Box" Logic)
 exports.reportSpam = async (req, res) => {
   try {
     const { number, tag, location, comment } = req.body;
@@ -149,27 +147,41 @@ exports.reportSpam = async (req, res) => {
 
     if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
 
-    // A. Save Report Log
-    await SpamReport.create({
-      phoneNumber: cleanNum,
-      reportedBy: userId,
-      tag: tag || "Spam",
-      location,
-      comment
-    });
+    // 1. Cast Vote (Will fail if user already voted due to Unique Index)
+    try {
+        await SpamReport.create({
+            phoneNumber: cleanNum,
+            reportedBy: userId,
+            tag: tag || "Spam",
+            location,
+            comment
+        });
+    } catch (e) {
+        if (e.code === 11000) {
+            return res.status(400).json({ msg: "You have already reported this number." });
+        }
+        throw e;
+    }
 
-    // B. Update Global Score
+    // 2. Count Total Votes
+    const totalReports = await SpamReport.countDocuments({ phoneNumber: cleanNum });
+
+    // 3. Calculate New Global Score
+    let newScore = 0;
+    if (totalReports >= SPAM_THRESHOLD) newScore = 100;
+    else newScore = Math.floor((totalReports / SPAM_THRESHOLD) * 100);
+
+    // 4. Update the "Scoreboard" (Global Number)
     await GlobalNumber.findOneAndUpdate(
       { phoneNumber: cleanNum },
       { 
-          $inc: { spamScore: 10 }, 
+          $set: { spamScore: newScore, location: location },
           $addToSet: { tags: tag || "Spam" },
-          $set: { location: location } 
       },
       { upsert: true }
     );
 
-    res.json({ success: true, msg: "Number reported as spam successfully" });
+    res.json({ success: true, msg: "Report received. Thank you for voting.", totalReports });
 
   } catch (err) {
     console.error("Report Error:", err.message);
@@ -177,7 +189,7 @@ exports.reportSpam = async (req, res) => {
   }
 };
 
-// 🟢 4. NOT SPAM (🔥 UPDATED: Smart Cleanup Logic)
+// 🟢 4. NOT SPAM (Updated Score Logic)
 exports.reportNotSpam = async (req, res) => {
     try {
         const { number } = req.body;
@@ -185,39 +197,28 @@ exports.reportNotSpam = async (req, res) => {
         const userId = req.user ? req.user.id : null;
 
         if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
-        if (!userId) return res.status(401).json({ msg: "Unauthorized" });
 
-        // ➤ STEP A: ZOMBIE KILLER 🧟‍♂️🔫
-        // Find and DELETE the report made by THIS user for THIS number.
-        const deletedReport = await SpamReport.findOneAndDelete({
+        // Remove the user's vote
+        await SpamReport.findOneAndDelete({
             phoneNumber: cleanNum,
             reportedBy: userId
         });
 
-        // ➤ STEP B: CALCULATE IMPACT
-        // If we deleted a report, undo the damage (-10). 
-        // If they never reported it but trust it, lower it slightly (-5).
-        const scoreDrop = deletedReport ? -10 : -5;
+        // Recalculate Score from scratch (Safest way)
+        const totalReports = await SpamReport.countDocuments({ phoneNumber: cleanNum });
+        let newScore = 0;
+        if (totalReports >= SPAM_THRESHOLD) newScore = 100;
+        else if (totalReports > 0) newScore = Math.floor((totalReports / SPAM_THRESHOLD) * 100);
 
-        // ➤ STEP C: UPDATE GLOBAL SCORE
         const globalEntry = await GlobalNumber.findOneAndUpdate(
             { phoneNumber: cleanNum },
-            { $inc: { spamScore: scoreDrop } },
-            { new: true, upsert: true } // Return the NEW updated document
+            { $set: { spamScore: newScore } },
+            { new: true, upsert: true }
         );
-
-        // ➤ STEP D: AUTOMATIC TAG CLEANUP 🧹
-        // If score drops below 10, remove "Spam" tag
-        if (globalEntry.spamScore < 10) {
-            await GlobalNumber.updateOne(
-                { phoneNumber: cleanNum },
-                { $pull: { tags: "Spam" } }
-            );
-        }
 
         res.json({ 
             success: true, 
-            msg: deletedReport ? "Report withdrawn. Marked safe." : "Marked as safe.",
+            msg: "Marked as safe.",
             newScore: globalEntry.spamScore
         });
 
@@ -227,41 +228,50 @@ exports.reportNotSpam = async (req, res) => {
     }
 };
 
-// 🟢 5. BLOCK NUMBER (Uses BlockedNumber Model)
+// 🟢 5. BLOCK NUMBER (Standard)
 exports.blockNumber = async (req, res) => {
   try {
     const { number, alsoReportSpam } = req.body;
-    const userId = req.user.id; // From Auth Middleware
-
+    const userId = req.user.id; 
     if (!number) return res.status(400).json({ message: "Number is required" });
-
     const cleanNum = normalizeNumber(number);
 
-    // A. Save to BlockedNumber Collection
     await BlockedNumber.findOneAndUpdate(
       { user: userId, phoneNumber: cleanNum },
       { user: userId, phoneNumber: cleanNum, reason: "Manual Block" },
       { upsert: true, new: true }
     );
 
-    // B. Optional: Report as spam globally
     if (alsoReportSpam && cleanNum) {
-      await GlobalNumber.findOneAndUpdate(
-        { phoneNumber: cleanNum },
-        { 
-          $inc: { spamScore: 10 }, 
-          $addToSet: { tags: "Blocked" },
-          $set: { lastReported: new Date() } 
-        }, 
-        { upsert: true }
-      );
+        // If blocking counts as a spam report, we call the logic manually
+        // But for now, we just increment score slightly
+        await GlobalNumber.findOneAndUpdate(
+            { phoneNumber: cleanNum },
+            { $inc: { spamScore: 1 } }, // Blocks have less weight than reports
+            { upsert: true }
+        );
     }
-
-    res.json({ success: true, message: "Number blocked successfully" });
-
+    res.json({ success: true, message: "Number blocked" });
   } catch (error) {
-    console.error("Block Error:", error.message);
     res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// 🟢 6. UNBLOCK NUMBER (Standard)
+exports.unblockNumber = async (req, res) => {
+  try {
+    const { number } = req.body;
+    const userId = req.user.id; 
+    if (!number) return res.status(400).json({ success: false, message: "Number is required" });
+    const cleanNum = normalizeNumber(number);
+
+    const deletedEntry = await BlockedNumber.findOneAndDelete({ user: userId, phoneNumber: cleanNum });
+
+    if (!deletedEntry) return res.status(404).json({ success: false, message: "Not in blocked list." });
+
+    res.json({ success: true, message: "Unblocked", removed: cleanNum });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 };
 
@@ -281,17 +291,12 @@ async function updateGlobalName(num, name) {
       });
     } else {
       const variation = entry.nameVariations.find(v => v.name.toLowerCase() === name.toLowerCase());
-      if (variation) {
-          variation.count++;
-      } else {
-          entry.nameVariations.push({ name, count: 1 });
-      }
-      // Find the most popular name
+      if (variation) variation.count++;
+      else entry.nameVariations.push({ name, count: 1 });
+      
       entry.nameVariations.sort((a, b) => b.count - a.count);
       entry.likelyName = entry.nameVariations[0].name;
     }
     await entry.save();
-  } catch (e) { 
-      console.error("Global Update Fail:", e.message); 
-  }
+  } catch (e) { console.error("Global Update Fail:", e.message); }
 }

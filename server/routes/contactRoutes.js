@@ -19,4 +19,7 @@ router.post('/not-spam', authMiddleware, contactController.reportNotSpam);
 // 🆕 ADD THIS LINE BELOW (Critical for Block Screen)
 router.post('/block', authMiddleware, contactController.blockNumber);
 
+// 🆕 NEW: Route to unblock a number
+router.post('/unblock', authMiddleware, contactController.unblockNumber);
+
 module.exports = router;

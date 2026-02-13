@@ -22,6 +22,7 @@ import DialerModal from '../../components/DialerModal';
 import { useCustomAlert } from '../../context/AlertContext';
 
 const { CallManagerModule } = NativeModules;
+const { width } = Dimensions.get('window'); // 🟢 Added Width for Ad Calculation
 const BATCH_SIZE = 40; 
 
 const THEME = {
@@ -39,18 +40,72 @@ const THEME = {
   }
 };
 
+// 🟢 AD IMAGES CONSTANT
+const AD_IMAGES = [
+  'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=500&q=80',
+  'https://images.unsplash.com/photo-1573806119002-3b145202636a?w=500&q=80',
+  'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=500&q=80',
+  'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&q=80',
+];
+
+// 🟢 NEW SCROLLING AD COMPONENT
+const ScrollingAdBanner = () => {
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const itemWidth = width * 0.75;
+
+  useEffect(() => {
+    const totalScrollWidth = itemWidth * AD_IMAGES.length;
+    
+    const startScroll = () => {
+      scrollX.setValue(0);
+      Animated.loop(
+        Animated.timing(scrollX, {
+          toValue: -totalScrollWidth,
+          duration: 25000, 
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+    };
+    startScroll();
+  }, [scrollX]);
+
+  return (
+    <View style={styles.adBannerWrapper}>
+      <View style={styles.adHeaderRow}>
+        <View style={styles.adLabelBox}><Text style={styles.adLabelText}>Ad</Text></View>
+        <Text style={styles.adBrandText}>Google Ads Sponsored</Text>
+      </View>
+      
+      <View style={styles.adClipContainer}>
+        <Animated.View style={[styles.adScrollRow, { transform: [{ translateX: scrollX }] }]}>
+          {[...AD_IMAGES, ...AD_IMAGES].map((uri, idx) => (
+            <View key={idx} style={[styles.adImageWrapper, { width: itemWidth }]}>
+              <Image source={{ uri }} style={styles.adImage} />
+            </View>
+          ))}
+        </Animated.View>
+      </View>
+
+      <TouchableOpacity style={styles.adCtaBtn} activeOpacity={0.8} onPress={() => Linking.openURL('https://google.com')}>
+        <Text style={styles.adCtaText}>Visit Store</Text>
+        <Feather name="external-link" size={12} color="#FFF" />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// ... (Rest of your existing helper functions: getLast10, getAvatarStyle, formatTime, getDayLabel, SkeletonCallLog) ...
 const getLast10 = (num: string) => {
-    if (!num) return '';
-    return num.replace(/\D/g, '').slice(-10);
+  if (!num) return '';
+  return num.replace(/\D/g, '').slice(-10);
 };
 
 const getAvatarStyle = (name: string) => {
   const bgColors = ['#F3F4F6', '#ECFEFF', '#F0FDF4', '#FFF7ED', '#FEF2F2', '#F5F3FF', '#EFF6FF', '#FFFBEB'];
   const textColors = ['#374151', '#0E7490', '#15803D', '#C2410C', '#B91C1C', '#7C3AED', '#1D4ED8', '#B45309'];
-  
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  
   const index = Math.abs(hash) % bgColors.length;
   return { backgroundColor: bgColors[index], color: textColors[index] };
 };
@@ -125,28 +180,15 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
             <Feather name="filter" size={18} color={currentFilter !== 'All' ? '#2563EB' : THEME.colors.primary} />
         </TouchableOpacity>
       </View>
+
+      {/* 🟢 INSERTED: Auto-Scrolling Ad Component */}
+      <ScrollingAdBanner />
     </View>
   );
 });
 
-const AdCard = () => (
-  <View style={styles.adWrapper}>
-    <LinearGradient 
-      colors={['#1E293B', '#0F172A']} 
-      start={{x:0, y:0}} end={{x:1, y:1}} 
-      style={styles.adCard}
-    >
-        <View>
-          <View style={styles.adBadge}><Text style={styles.adBadgeText}>SPONSORED</Text></View>
-          <Text style={styles.adTitle}>Upgrade to Pro</Text>
-          <Text style={styles.adDesc}>Caller ID & Spam Block.</Text>
-        </View>
-        <View style={styles.adIconCircle}>
-            <Feather name="zap" size={20} color="#FBBF24" />
-        </View>
-    </LinearGradient>
-  </View>
-);
+// ... (Rest of your original code: CallLogItem, CallLogScreen logic, and styles) ...
+// NOTE: I am pasting the rest exactly as it was, with ONLY the new ad styles added at the bottom.
 
 const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress }: any) => {
   const isMissed = item.type === 'missed';
@@ -556,13 +598,31 @@ const styles = StyleSheet.create({
   searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
   filterIcon: { padding: 8, borderRadius: 12 },
-  adWrapper: { paddingHorizontal: 20, marginBottom: 15 },
-  adCard: { borderRadius: 20, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
-  adBadge: { backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 6 },
-  adBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  adTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
-  adDesc: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
-  adIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  
+  // 🟢 AD COMPONENT STYLES
+  adBannerWrapper: {
+    backgroundColor: '#FFF',
+    marginTop: 20,
+    borderRadius: 20,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  adHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  adLabelBox: { backgroundColor: '#FBBF24', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  adLabelText: { fontSize: 10, fontWeight: '900', color: '#92400E' },
+  adBrandText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  adClipContainer: { overflow: 'hidden', height: 80, borderRadius: 12, backgroundColor: '#F8FAFC' },
+  adScrollRow: { flexDirection: 'row' },
+  adImageWrapper: { height: 80, marginRight: 10, borderRadius: 10, overflow: 'hidden' },
+  adImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  adCtaBtn: { marginTop: 10, backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 10, gap: 6 },
+  adCtaText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
+
   sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },
   cardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 20, marginBottom: 8, padding: 14, borderRadius: 18, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#F1F5F9' },

@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { 
   View, Text, FlatList, StyleSheet, PermissionsAndroid, Platform, 
-  ActivityIndicator, TouchableOpacity, Modal, ScrollView, Switch,
-  Vibration, LayoutAnimation, UIManager, ToastAndroid, Image, TextInput,
-  Animated, NativeModules, Linking // 🟢 Added Linking
+  TouchableOpacity, ScrollView, Vibration, UIManager, 
+  Image, TextInput, Animated, Linking 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -21,12 +20,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const getRandomLightColor = () => {
-  const lightColors = [
-    '#FDF4FF', '#F0FDF4', '#FEFCE8', '#ECFEFF', '#F3F4F6', 
-    '#FFF1F2', '#F5F3FF', '#FFF7ED', '#EFF6FF', '#FAFAF9'
-  ];
-  return lightColors[Math.floor(Math.random() * lightColors.length)];
+// 🟢 HELPER: Normalize phone numbers for better matching
+const normalizeNumber = (phone: string) => {
+  if (!phone) return '';
+  return phone.replace(/\D/g, '').slice(-10);
 };
 
 interface SmsMessage {
@@ -36,26 +33,24 @@ interface SmsMessage {
   date: number;
 }
 
-interface ContactInfo {
-  name: string;
-  imageUri?: string;
+interface GroupedConversation {
+  conversationId: string;
+  address: string;
+  displayName: string;
+  displayImage?: string;
+  lastMessage: string;
+  timestamp: number;
+  category: string;
 }
-
-const PAGE_SIZE = 50; 
 
 const THEME = {
   colors: {
     bg: '#F8FAFC', 
-    card: '#FFFFFF',
     primary: '#0F172A', 
-    accent: '#3B82F6', 
     textMain: '#1E293B',
     textSub: '#64748B',
-    danger: '#EF4444',
-    success: '#10B981',
-    gold: '#F59E0B', 
-    border: '#E2E8F0',
     skeleton: '#E2E8F0', 
+    accent: '#6366F1'
   }
 };
 
@@ -108,9 +103,6 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
           value={searchText}
           onChangeText={setSearchText} 
         />
-        <TouchableOpacity style={styles.filterIcon}>
-            <MaterialCommunityIcons name="tune-vertical" size={20} color={THEME.colors.primary} />
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -121,226 +113,234 @@ export default function MessageScreen() {
   const { user } = useAuth();
   const { showAlert } = useCustomAlert();
 
-  const [messages, setMessages] = useState<SmsMessage[]>([]);
+  const [conversations, setConversations] = useState<GroupedConversation[]>([]);
   const [loading, setLoading] = useState(true); 
-  const [loadingMore, setLoadingMore] = useState(false); 
-  const [currentCount, setCurrentCount] = useState(0); 
-  
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
   const [searchText, setSearchText] = useState(''); 
-
-  const [contactMap, setContactMap] = useState<Map<string, ContactInfo>>(new Map());
-  
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<SmsMessage | null>(null);
-  const [modalBgColor, setModalBgColor] = useState('#FFFFFF');
+  const [contactMap, setContactMap] = useState<Map<string, { name: string, imageUri?: string }>>(new Map());
 
   useFocusEffect(
     useCallback(() => {
-      const checkAndLoad = async () => {
-        if (Platform.OS === 'android') {
-          const hasSmsPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
-          if (hasSmsPermission) {
-            const { status } = await Contacts.requestPermissionsAsync();
-            if (status === 'granted') await loadContacts();
-            fetchMessages(0);
-          } else {
-            const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS);
-            if (status === PermissionsAndroid.RESULTS.GRANTED) {
-              const { status: contactStatus } = await Contacts.requestPermissionsAsync();
-              if (contactStatus === 'granted') await loadContacts();
-              fetchMessages(0);
-            } else {
-              setLoading(false);
-              showAlert("Permission Denied", "SMS permission is required.", "error");
-            }
-          }
-        } else {
-          setLoading(false);
-          showAlert("Not Supported", "iOS does not support raw SMS reading.", "warning");
-        }
-      };
-      loadPinnedMessages();
-      checkAndLoad();
+      checkPermissionsAndLoad();
     }, [])
   );
 
-  // 🟢 REDIRECTION LOGIC: Opens Google Messages
-  const openGoogleMessages = async () => {
-    const url = 'sms:';
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
+  const checkPermissionsAndLoad = async () => {
+    if (Platform.OS === 'android') {
+      const hasSms = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
+      if (hasSms) {
+        const loadedMap = await loadContacts(); 
+        fetchAndGroupMessages(loadedMap); 
+        loadPinnedConversations();
       } else {
-        showAlert("Error", "No messaging app found on this device.", "error");
+        const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS);
+        if (status === PermissionsAndroid.RESULTS.GRANTED) {
+          const loadedMap = await loadContacts();
+          fetchAndGroupMessages(loadedMap);
+        } else {
+          setLoading(false);
+          showAlert("Permission Denied", "SMS permission is required.", "error");
+        }
       }
-    } catch (err) {
-      console.error("Linking error:", err);
+    } else {
+      setLoading(false);
     }
   };
 
   const loadContacts = async () => {
     try {
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Image],
-      });
-      const map = new Map<string, ContactInfo>();
+      const { status } = await Contacts.requestPermissionsAsync();
+      const map = new Map<string, { name: string, imageUri?: string }>();
       
-      if (data.length > 0) {
-        data.forEach(contact => {
-          if (contact.phoneNumbers) {
-            contact.phoneNumbers.forEach(phone => {
-              if (phone.number) {
-                const cleanNumber = phone.number.replace(/\D/g, '').slice(-10); 
-                map.set(cleanNumber, {
-                    name: contact.name,
-                    imageUri: contact.imageAvailable ? contact.image?.uri : undefined
-                });
-              }
-            });
+      if (status === 'granted') {
+        const { data } = await Contacts.getContactsAsync({
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Image],
+        });
+        
+        data.forEach(c => {
+          if (c.phoneNumbers && c.name) {
+             c.phoneNumbers.forEach(p => {
+               const clean = normalizeNumber(p.number || '');
+               if(clean) map.set(clean, { name: c.name, imageUri: c.image?.uri });
+             });
           }
         });
+        setContactMap(map);
       }
-      setContactMap(map);
-    } catch (e) { console.log("Contacts Error", e); }
+      return map; 
+    } catch (e) { 
+      return new Map(); 
+    }
   };
 
-  const loadPinnedMessages = async () => {
+  const loadPinnedConversations = async () => {
     try {
-      const storedIds = await AsyncStorage.getItem('pinned_msgs');
-      if (storedIds) setPinnedIds(JSON.parse(storedIds));
-    } catch (e) { console.log("Error pins", e); }
+      const stored = await AsyncStorage.getItem('pinned_chats');
+      if (stored) setPinnedIds(JSON.parse(stored));
+    } catch (e) {}
   };
 
-  const getCategory = (msg: SmsMessage, cleanNumber: string): string => {
-    if (contactMap.has(cleanNumber)) return 'Private';
+  const fetchAndGroupMessages = (currentContactMap: Map<string, any> = contactMap) => {
+    const filter = { box: 'inbox', indexFrom: 0, maxCount: 1000 }; 
+    
+    SmsAndroid.list(
+      JSON.stringify(filter),
+      (fail: string) => { setLoading(false); },
+      (count: number, smsList: string) => {
+        try {
+          const rawMessages: SmsMessage[] = JSON.parse(smsList);
+          const groups: { [key: string]: GroupedConversation } = {};
+
+          rawMessages.forEach((msg) => {
+            const address = msg.address;
+            
+            if (!groups[address]) {
+              const cleanNum = normalizeNumber(address);
+              const contact = currentContactMap.get(cleanNum);
+              
+              groups[address] = {
+                conversationId: address,
+                address: address,
+                displayName: contact?.name || address, 
+                displayImage: contact?.imageUri,
+                lastMessage: msg.body,
+                timestamp: msg.date,
+                category: determineCategory(msg, contact),
+              };
+            }
+
+            if (msg.date > groups[address].timestamp) {
+              groups[address].lastMessage = msg.body;
+              groups[address].timestamp = msg.date;
+            }
+          });
+
+          const groupedArray = Object.values(groups).sort((a, b) => b.timestamp - a.timestamp);
+          setConversations(groupedArray);
+        } catch (e) { console.log(e); } 
+        finally { setLoading(false); }
+      }
+    );
+  };
+
+  // 🟢 STRICT CATEGORY LOGIC FIX
+  const determineCategory = (msg: SmsMessage, contact: any) => {
+    // 1. MUST have a saved contact name to be in the 'Private' tab.
+    if (contact && contact.name) return 'Private';
+    
     const body = msg.body.toLowerCase();
     const sender = msg.address.toLowerCase();
     const isNumericSender = /^[0-9+]+$/.test(sender.replace('-', ''));
-    if (body.includes('otp') || body.includes('code') || body.includes('password')) return 'OTP';
-    if (body.includes('offer') || body.includes('sale') || body.includes('win') || body.includes('congrats')) return 'Spam';
-    if (!isNumericSender && (sender.includes('-') || sender.length <= 9)) return 'Promotion';
-    if (isNumericSender && sender.length >= 10) return 'Private'; 
-    return 'All';
+
+    // 2. Filter obvious machine senders
+    if (body.includes('otp') || body.includes('code')) return 'OTP';
+    if (body.includes('offer') || body.includes('sale')) return 'Promotion';
+    if (!isNumericSender && (sender.includes('-') || sender.length <= 9)) return 'OTP'; 
+    
+    // 3. Unsaved normal numbers go to 'Other' so they ONLY show up in the 'All' tab
+    return 'Other'; 
   };
 
-  const fetchMessages = (startIndex: number) => {
-    if (startIndex > 0 && loadingMore) return;
-    if (startIndex > 0) setLoadingMore(true);
-    const filter = { box: 'inbox', indexFrom: startIndex, maxCount: PAGE_SIZE };
-    SmsAndroid.list(
-      JSON.stringify(filter),
-      (fail: string) => { setLoading(false); setLoadingMore(false); },
-      (count: number, smsList: string) => {
-        try {
-          const rawBatch = JSON.parse(smsList);
-          if (startIndex === 0) setMessages(rawBatch);
-          else setMessages(prev => [...prev, ...rawBatch]);
-          setCurrentCount(startIndex + PAGE_SIZE);
-        } catch (e) { console.log(e); } 
-        finally { setLoading(false); setLoadingMore(false); }
-      }
-    );
-  };
-
-  const loadMoreMessages = () => {
-    if (!loadingMore && !loading && messages.length >= PAGE_SIZE) fetchMessages(currentCount);
-  };
-
-  const togglePin = async (msgId: string) => {
-    const idString = String(msgId);
-    Vibration.vibrate(50); 
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    let newPinned = [...pinnedIds];
-    if (newPinned.includes(idString)) {
-      newPinned = newPinned.filter(id => id !== idString);
-      ToastAndroid.show("Unpinned", ToastAndroid.SHORT);
-    } else {
-      newPinned.push(idString);
-      ToastAndroid.show("Pinned", ToastAndroid.SHORT);
-    }
+  const togglePin = async (id: string) => {
+    Vibration.vibrate(50);
+    let newPinned = pinnedIds.includes(id) ? pinnedIds.filter(p => p !== id) : [...pinnedIds, id];
     setPinnedIds(newPinned);
-    await AsyncStorage.setItem('pinned_msgs', JSON.stringify(newPinned));
+    await AsyncStorage.setItem('pinned_chats', JSON.stringify(newPinned));
   };
 
-  const { pinnedList, regularList } = useMemo(() => {
-    const pinned: any[] = [];
-    const regular: any[] = [];
-    const lowerSearch = searchText.toLowerCase();
-    messages.forEach(msg => {
-      const cleanAddr = msg.address.replace(/\D/g, '').slice(-10);
-      const contactInfo = contactMap.get(cleanAddr);
-      const displayName = contactInfo?.name ?? msg.address;
-      const displayImage = contactInfo?.imageUri;
-      const category = getCategory(msg, cleanAddr);
-      const matchesSearch = displayName.toLowerCase().includes(lowerSearch) || msg.body.toLowerCase().includes(lowerSearch);
-      if (!matchesSearch) return;
-      if (selectedCategory !== 'All' && category !== selectedCategory) return;
-      const processedMsg = { ...msg, displayName, displayImage, category, cleanAddr };
-      if (pinnedIds.includes(String(msg._id))) pinned.push(processedMsg);
-      else regular.push(processedMsg);
-    });
-    return { pinnedList: pinned, regularList: regular };
-  }, [messages, pinnedIds, searchText, selectedCategory, contactMap]); 
-
-  const renderAvatar = (name: string, category: string, imageUri?: string) => {
-    if (imageUri) return <Image source={{ uri: imageUri }} style={[styles.avatar, styles.realImage]} />;
-    if (category === 'Private' && !/^[0-9+]+$/.test(name)) {
-        return (
-            <View style={[styles.avatar, { backgroundColor: '#CCFBF1', borderWidth: 1, borderColor: '#2DD4BF' }]}>
-                <Text style={[styles.avatarText, { color: '#0F766E' }]}>{name.charAt(0).toUpperCase()}</Text>
-                <View style={styles.savedBadge} />
-            </View>
-        );
+  const displayedConversations = useMemo(() => {
+    let data = conversations;
+    if (searchText) {
+      const lower = searchText.toLowerCase();
+      data = data.filter(c => c.displayName.toLowerCase().includes(lower) || c.lastMessage.toLowerCase().includes(lower));
     }
-    if (category === 'OTP') return <View style={[styles.avatar, { backgroundColor: '#EFF6FF' }]}><MaterialCommunityIcons name="shield-check-outline" size={22} color="#2563EB" /></View>;
-    if (category === 'Promotion') return <View style={[styles.avatar, { backgroundColor: '#FAF5FF' }]}><Feather name="shopping-bag" size={20} color="#9333EA" /></View>;
-    if (category === 'Spam') return <View style={[styles.avatar, { backgroundColor: '#FEF2F2' }]}><Feather name="alert-triangle" size={20} color="#DC2626" /></View>;
-    const bgColors = ['#F3F4F6', '#F0FDF4', '#FFF7ED', '#FDF4FF'];
-    const textColors = ['#4B5563', '#16A34A', '#EA580C', '#C026D3'];
-    const idx = name.length % bgColors.length;
-    return <View style={[styles.avatar, { backgroundColor: bgColors[idx] }]}><Text style={[styles.avatarText, { color: textColors[idx] }]}>{name.charAt(0).toUpperCase()}</Text></View>;
+    if (selectedCategory !== 'All') {
+      data = data.filter(c => c.category === selectedCategory);
+    }
+    const pinned = data.filter(c => pinnedIds.includes(c.conversationId));
+    const unpinned = data.filter(c => !pinnedIds.includes(c.conversationId));
+    return [...pinned, ...unpinned];
+  }, [conversations, searchText, selectedCategory, pinnedIds]);
+
+  const openGoogleMessages = async () => {
+    const url = 'sms:';
+    try { await Linking.openURL(url); } catch (err) { showAlert("Error", "No messaging app found.", "error"); }
   };
 
-  const renderMessageItem = ({ item }: { item: any }) => {
-    const dateObj = new Date(item.date);
-    const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const isPinned = pinnedIds.includes(String(item._id));
+  const handleConversationPress = (item: GroupedConversation) => {
+    router.push({ 
+        pathname: '/messages/chat', 
+        params: { 
+            senderId: item.address, 
+            senderName: item.displayName, 
+            isBank: item.category === 'OTP' || item.category === 'Promotion' ? 'true' : 'false',
+            avatar: item.displayImage || ''
+        } 
+    });
+  };
+
+  const renderItem = ({ item }: { item: GroupedConversation }) => {
+    const isPinned = pinnedIds.includes(item.conversationId);
+    const time = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     return (
       <TouchableOpacity 
-        style={[styles.itemContainer, isPinned && styles.pinnedItemContainer]} 
-        onPress={() => { 
-            const newColor = getRandomLightColor();
-            setModalBgColor(newColor);
-            setSelectedMessage(item); 
-            setModalVisible(true); 
-        }}
-        activeOpacity={0.6}
+        style={[styles.itemContainer, isPinned && styles.pinnedItem]}
+        activeOpacity={0.7}
+        onPress={() => handleConversationPress(item)}
+        onLongPress={() => togglePin(item.conversationId)}
       >
-        {renderAvatar(item.displayName, item.category, item.displayImage)}
-        <View style={styles.contentColumn}>
-          <View style={styles.nameRow}>
-             <Text style={styles.senderName} numberOfLines={1}>{item.displayName}</Text>
-             {isPinned && <MaterialCommunityIcons name="pin" size={14} color={THEME.colors.primary} style={{marginLeft: 6, transform: [{rotate: '-45deg'}]}} />}
-          </View>
-          <Text style={styles.messagePreview} numberOfLines={2}>{item.body}</Text>
+        <View style={styles.avatarContainer}>
+            {item.displayImage ? (
+                <Image source={{ uri: item.displayImage }} style={styles.realAvatar} />
+            ) : (
+                <View style={[styles.placeholderAvatar, getAvatarStyle(item.category)]}>
+                    {getAvatarIcon(item.category, item.displayName)}
+                </View>
+            )}
         </View>
+
+        <View style={styles.contentColumn}>
+            <View style={styles.headerRow}>
+                <Text style={styles.nameText} numberOfLines={1}>{item.displayName}</Text>
+                {isPinned && <MaterialCommunityIcons name="pin" size={14} color={THEME.colors.primary} style={{marginLeft: 6, transform: [{rotate: '-45deg'}]}} />}
+            </View>
+            <Text style={styles.messageText} numberOfLines={1}>
+                {item.lastMessage}
+            </Text>
+        </View>
+
         <View style={styles.metaColumn}>
-           <Text style={styles.dateText}>{timeString}</Text>
-           <TouchableOpacity onPress={() => togglePin(item._id)} style={{padding: 4}}>
-              <Feather name="more-horizontal" size={18} color="#CBD5E1" />
-           </TouchableOpacity>
+            <Text style={styles.timeText}>{time}</Text>
         </View>
       </TouchableOpacity>
     );
+  };
+
+  const getAvatarStyle = (cat: string) => {
+    switch(cat) {
+        case 'OTP': return { backgroundColor: '#EFF6FF' };
+        case 'Promotion': return { backgroundColor: '#FAF5FF' };
+        case 'Spam': return { backgroundColor: '#FEF2F2' };
+        default: return { backgroundColor: '#F1F5F9' };
+    }
+  };
+
+  const getAvatarIcon = (cat: string, name: string) => {
+    switch(cat) {
+        case 'OTP': return <MaterialCommunityIcons name="shield-check-outline" size={22} color="#2563EB" />;
+        case 'Promotion': return <Feather name="shopping-bag" size={20} color="#9333EA" />;
+        case 'Spam': return <Feather name="alert-triangle" size={20} color="#DC2626" />;
+        default: return <Text style={{fontSize: 18, fontWeight: '700', color: '#475569'}}>{name.charAt(0).toUpperCase()}</Text>;
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" backgroundColor={THEME.colors.bg} />
       <HeaderComponent searchText={searchText} setSearchText={setSearchText} onProfilePress={() => router.push('/profile')} userPhoto={user?.profilePhoto} />
+      
       <View style={{backgroundColor: THEME.colors.bg, zIndex: 10}}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catContainer}>
             {['All', 'Private', 'OTP', 'Promotion', 'Spam'].map((cat) => (
@@ -355,41 +355,19 @@ export default function MessageScreen() {
         <View style={{marginTop: 10}}>{[1, 2, 3, 4, 5, 6].map(i => <SkeletonItem key={i} />)}</View>
       ) : (
         <FlatList
-          data={[...pinnedList, ...regularList]}
-          keyExtractor={(item) => String(item._id)} 
-          renderItem={renderMessageItem}
-          onEndReached={loadMoreMessages}
-          onEndReachedThreshold={0.5} 
+          data={displayedConversations}
+          keyExtractor={(item) => item.conversationId}
+          renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
-          keyboardShouldPersistTaps="handled"
         />
       )}
 
-      {/* 🚀 FAB: UPDATED TO REDIRECT TO GOOGLE MESSAGES */}
       <TouchableOpacity style={styles.fab} onPress={openGoogleMessages}>
           <View style={styles.fabIcon}>
              <MaterialCommunityIcons name="pencil-outline" size={24} color="#FFF" />
           </View>
           <Text style={styles.fabText}>Compose</Text>
       </TouchableOpacity>
-
-      <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: modalBgColor }]}>
-           <View style={[styles.modalHeader, { borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
-             <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.backBtn}><Ionicons name="chevron-back" size={24} color={THEME.colors.primary} /></TouchableOpacity>
-             <Text style={styles.modalTitle} numberOfLines={1}>{selectedMessage ? (selectedMessage as any).displayName : 'Message'}</Text>
-             <View style={{width: 40}} /> 
-           </View>
-           {selectedMessage && (
-             <ScrollView style={{padding: 24}}>
-                <View style={styles.messageBubble}>
-                   <Text style={styles.messageBody}>{selectedMessage.body}</Text>
-                   <Text style={styles.messageTime}>{new Date(selectedMessage.date).toLocaleString()}</Text>
-                </View>
-             </ScrollView>
-           )}
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -405,32 +383,24 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
-  filterIcon: { padding: 8, backgroundColor: '#F8FAFC', borderRadius: 12 },
   catContainer: { paddingHorizontal: 24, paddingVertical: 12 },
   catPill: { backgroundColor: '#FFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24, marginRight: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   catPillActive: { backgroundColor: THEME.colors.primary, borderColor: THEME.colors.primary },
   catText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
   catTextActive: { color: '#FFF' },
   itemContainer: { flexDirection: 'row', paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
-  pinnedItemContainer: { backgroundColor: '#F8FAFC' },
-  avatar: { width: 52, height: 52, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  realImage: { borderWidth: 1, borderColor: '#E2E8F0' },
-  avatarText: { fontSize: 20, fontWeight: '800' },
-  savedBadge: { width: 12, height: 12, backgroundColor: '#10B981', position: 'absolute', bottom: -2, right: -2, borderRadius: 6, borderWidth: 2, borderColor: '#FFF' },
+  pinnedItem: { backgroundColor: '#F8FAFC' },
+  avatarContainer: { marginRight: 15 },
+  placeholderAvatar: { width: 52, height: 52, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  realAvatar: { width: 52, height: 52, borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0' },
   contentColumn: { flex: 1, justifyContent: 'center', marginRight: 12 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  senderName: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain },
-  messagePreview: { fontSize: 14, color: THEME.colors.textSub, lineHeight: 20, fontWeight: '400' },
-  metaColumn: { alignItems: 'flex-end', justifyContent: 'space-between', height: 44 },
-  dateText: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  nameText: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain },
+  messageText: { fontSize: 14, color: THEME.colors.textSub, lineHeight: 20 },
+  metaColumn: { alignItems: 'flex-end', justifyContent: 'center', height: 44 }, 
+  timeText: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
   fab: { position: 'absolute', bottom: 110, right: 24, backgroundColor: THEME.colors.primary, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 32, elevation: 8 },
   fabIcon: { marginRight: 8 },
   fabText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  modalContainer: { flex: 1 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1 },
-  backBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 12 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: THEME.colors.primary, flex: 1, textAlign: 'center' },
-  messageBubble: { backgroundColor: 'rgba(255,255,255,0.7)', padding: 24, borderRadius: 24, borderTopLeftRadius: 4 },
-  messageBody: { fontSize: 17, lineHeight: 26, color: '#334155', fontWeight: '400' },
-  messageTime: { marginTop: 16, fontSize: 12, color: '#64748B', fontWeight: '600', textAlign: 'right' },
+  avatar: { width: 52, height: 52, borderRadius: 20, marginRight: 15 },
 });

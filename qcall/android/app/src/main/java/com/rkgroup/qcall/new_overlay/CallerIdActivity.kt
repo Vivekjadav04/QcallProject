@@ -3,24 +3,25 @@ package com.rkgroup.qcall.new_overlay
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
-import android.telecom.TelecomManager
 import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
@@ -31,329 +32,276 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
-/**
- * CallerIdActivity
- * ----------------
- * This Activity is the "Popup" that appears when the phone rings.
- * It uses the 'SYSTEM_ALERT_WINDOW' permission to draw over other apps.
- * It fetches Caller ID info from your server and displays it instantly.
- */
 class CallerIdActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "QCall-Native"
-        // ⚠️ API URL: This must be accessible from the phone (Use Ngrok for dev, Real URL for prod)
         private const val SERVER_URL = "https://unintegrable-adalynn-uninvokable.ngrok-free.dev/api/contacts/identify"
     }
 
-    // --- UI Variables ---
     private lateinit var mainCard: CardView
-    private lateinit var headerContainer: RelativeLayout
+    private lateinit var headerContainer: LinearLayout
     private lateinit var txtName: TextView
     private lateinit var txtNumber: TextView
     private lateinit var txtTopInfo: TextView
     private lateinit var imgAvatar: ImageView
     private lateinit var txtAvatarFallback: TextView
-
-    // --- Action Button Variables ---
-    private lateinit var btnActionCall: LinearLayout
-    private lateinit var btnActionSpam: LinearLayout
-    private lateinit var btnActionSave: LinearLayout
-    private lateinit var btnActionBlock: LinearLayout
+    private lateinit var adContainer: FrameLayout
+    
+    private lateinit var premiumBadge: ImageView
     private lateinit var btnViewProfile: TextView
+    private lateinit var txtActionSave: TextView
+    
+    private lateinit var btnActionCall: LinearLayout
+    private lateinit var btnActionMessage: LinearLayout
+    private lateinit var btnActionSaveBtn: LinearLayout
+    private lateinit var btnActionSpam: LinearLayout
+    private lateinit var btnActionBlock: LinearLayout
 
-    // --- Theme Colors ---
-    private val COLOR_BLUE = Color.parseColor("#0087FF") // Used for Safe/Global numbers
-    private val COLOR_RED = Color.parseColor("#FF3B30")  // Used for Spam/Error numbers
+    // 🎨 Standard Colors
+    private val COLOR_SAFE_BLUE = Color.parseColor("#1C64F2") 
+    private val COLOR_SPAM_RED = Color.parseColor("#DC2626") 
+    private val COLOR_VERIFIED_GREEN = Color.parseColor("#10B981") 
+
+    // Local User Settings
+    private var hasNoAds = false
+    private var isAfterCall = false
+    private var callDurationSeconds = 0
+    private var hasGoldenId = false
+
+    // 🟢 BUG FIX: Track the network request so we can cancel it if the overlay closes early
+    private var fetchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.d(TAG, "🚀 CallerIdActivity Launching...")
-
-        // =========================================================================
-        // 1. WINDOW CONFIGURATION (THE "OVERLAY" MAGIC)
-        // =========================================================================
+        super.onCreate(savedInstanceState)
         
-        // A. Set Window Type to OVERLAY (Allows drawing over other apps)
+        setupWindowManager()
+
+        setContentView(R.layout.activity_caller_id)
+        window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+
+        initializeViews()
+        
+        resetUI() 
+        processIntentData(intent)
+    }
+
+    // 🟢 BUG FIX: Removed the '?' to match strict Kotlin null-safety rules
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        Log.d(TAG, "🔔 onNewIntent triggered: Fresh call arrived while overlay was open.")
+        
+        resetUI()
+        processIntentData(intent)
+    }
+
+    private fun processIntentData(currentIntent: Intent) {
+        val sharedPref: SharedPreferences = getSharedPreferences("QcallPrefs", Context.MODE_PRIVATE)
+        val allowedFeatures = sharedPref.getStringSet("allowedFeatures", emptySet()) ?: emptySet()
+        
+        hasNoAds = allowedFeatures.contains("no_ads")
+        hasGoldenId = allowedFeatures.contains("golden_caller_id")
+
+        if (hasNoAds) {
+            adContainer.visibility = View.GONE
+        }
+
+        val number = currentIntent.getStringExtra("number") ?: "Unknown"
+        val passedName = currentIntent.getStringExtra("name")
+        isAfterCall = currentIntent.getBooleanExtra("isAfterCall", false)
+        callDurationSeconds = currentIntent.getIntExtra("duration", 0)
+        
+        txtNumber.text = number
+
+        setupClickListeners(number)
+        showCard()
+        
+        identifyCaller(number, passedName, hasGoldenId)
+    }
+
+    private fun resetUI() {
+        txtName.text = "Loading Caller Info..."
+        txtNumber.text = "..."
+        txtTopInfo.text = "QCALL • Analyzing..."
+        imgAvatar.visibility = View.GONE
+        txtAvatarFallback.visibility = View.GONE
+        premiumBadge.visibility = View.GONE
+        
+        headerContainer.background = android.graphics.drawable.ColorDrawable(COLOR_SAFE_BLUE)
+        txtName.setTextColor(Color.WHITE)
+        txtTopInfo.setTextColor(Color.WHITE)
+        txtNumber.setTextColor(Color.parseColor("#E6FFFFFF"))
+    }
+
+    private fun setupWindowManager() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val params = window.attributes
-            // TYPE_APPLICATION_OVERLAY is required for Android 8.0+
             params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            
-            // Allow drawing into the "Notch" area on newer phones (Android 9+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
             window.attributes = params
         }
 
-        // B. Flags to Show on Lock Screen & Turn Screen On
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
-            // Dismiss Keyguard (if no security) so the activity is visible immediately
             val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             keyguardManager.requestDismissKeyguard(this, null)
         } else {
-            // Fallback for older Android versions
             @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            )
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         }
+    }
 
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_caller_id)
-        
-        // =========================================================================
-        // 2. BIND UI ELEMENTS
-        // =========================================================================
-
+    private fun initializeViews() {
         mainCard = findViewById(R.id.mainCard)
         headerContainer = findViewById(R.id.headerContainer)
         txtName = findViewById(R.id.txtName)
         txtNumber = findViewById(R.id.txtNumber)
         txtTopInfo = findViewById(R.id.txtTopInfo)
-        
         imgAvatar = findViewById(R.id.imgAvatar)
         txtAvatarFallback = findViewById(R.id.txtAvatarFallback)
+        adContainer = findViewById(R.id.adContainer)
         
-        val btnClose = findViewById<ImageButton>(R.id.btnClose)
-        btnActionCall = findViewById(R.id.btnActionCall)
-        btnActionSpam = findViewById(R.id.btnActionSpam)
-        btnActionSave = findViewById(R.id.btnActionSave)
-        btnActionBlock = findViewById(R.id.btnActionBlock)
+        premiumBadge = findViewById(R.id.premiumBadge)
         btnViewProfile = findViewById(R.id.btnViewProfile)
+        txtActionSave = findViewById(R.id.txtActionSave)
 
-        // Initially hide card (we will animate it in)
+        btnActionCall = findViewById(R.id.btnActionCall)
+        btnActionMessage = findViewById(R.id.btnActionMessage)
+        btnActionSaveBtn = findViewById(R.id.btnActionSave)
+        btnActionSpam = findViewById(R.id.btnActionSpam) 
+        btnActionBlock = findViewById(R.id.btnActionBlock)
+
         mainCard.visibility = View.INVISIBLE
+    }
 
-        // Get Data passed from BroadcastReceiver
-        val number = intent.getStringExtra("number") ?: "Unknown"
-        val passedName = intent.getStringExtra("name")
-        txtNumber.text = number
-
-        // =========================================================================
-        // 3. SETUP BUTTON ACTIONS
-        // =========================================================================
-
-        // [X] Close Button - Closes the overlay
-        btnClose.setOnClickListener { closeOverlay() }
-
-        // [Call] Button - Redirects to the native Dialer
+    private fun setupClickListeners(number: String) {
+        findViewById<ImageButton>(R.id.btnClose).setOnClickListener { closeOverlay() }
         btnActionCall.setOnClickListener {
             closeOverlay()
             try {
-                val telecomManager = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
-                // If call is ongoing, just show the call screen
-                if (checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED && telecomManager.isInCall) {
-                    telecomManager.showInCallScreen(false)
-                } else {
-                    // Otherwise, dial the number
-                    val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
-                    callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(callIntent)
-                }
-            } catch (e: Exception) {
-                // Fallback catch
                 val callIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number"))
                 callIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(callIntent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to open dialer", e)
             }
         }
-
-        // [Deep Links] - These open specific pages in your Expo/React Native App
-        // using the "qcall://" scheme defined in your app.json
-        
-        btnActionSpam.setOnClickListener {
-            openDeepLink("qcall://caller-id/spam-report?number=$number", "Report Spam")
-        }
-
-        btnActionSave.setOnClickListener {
-            openDeepLink("qcall://caller-id/save-contact?number=$number", "Save Contact")
-        }
-
-        btnActionBlock.setOnClickListener {
-            openDeepLink("qcall://caller-id/block-number?number=$number", "Block Number")
-        }
-
-        btnViewProfile.setOnClickListener {
-             openDeepLink("qcall://caller-id/view-profile?number=$number", "View Profile")
-        }
-
-        // =========================================================================
-        // 4. EXECUTION LOGIC (NO DELAY)
-        // =========================================================================
-        
-        Log.d(TAG, "⚡ Showing overlay immediately (Delay Removed)...")
-        
-        // 1. Show the card instantly (with 'Unknown' or loading state)
-        showCard()
-        
-        // 2. Start fetching data from server in background
-        identifyCaller(number, passedName)
+        btnViewProfile.setOnClickListener { openDeepLink("qcall://caller-id/view-profile?number=$number") }
+        btnActionMessage.setOnClickListener { openDeepLink("sms:$number") }
+        btnActionSaveBtn.setOnClickListener { openDeepLink("qcall://caller-id/save-contact?number=$number") }
+        btnActionSpam.setOnClickListener { openDeepLink("qcall://caller-id/report-spam?number=$number") }
+        btnActionBlock.setOnClickListener { openDeepLink("qcall://caller-id/block-number?number=$number") }
     }
 
-    /**
-     * Helper to open React Native Deep Links and close the overlay
-     */
-    private fun openDeepLink(link: String, actionName: String) {
-        try {
-            Log.d(TAG, "Opening App for $actionName: $link")
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
-            closeOverlay()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error opening deep link", e)
-        }
-    }
-
-    // --- Animation Logic ---
-    private fun showCard() {
-        mainCard.visibility = View.VISIBLE
-        val anim = AnimationUtils.loadAnimation(this, R.anim.slide_in_bottom)
-        mainCard.startAnimation(anim)
-    }
-
-    private fun closeOverlay() {
-        val anim = AnimationUtils.loadAnimation(this, R.anim.slide_out_bottom)
-        anim.setAnimationListener(object : Animation.AnimationListener {
-            override fun onAnimationStart(animation: Animation?) {}
-            override fun onAnimationRepeat(animation: Animation?) {}
-            override fun onAnimationEnd(animation: Animation?) {
-                mainCard.visibility = View.GONE
-                finishAndRemoveTask() // Completely kills this Activity
-                overridePendingTransition(0, 0) // Prevents ghost animation
-            }
-        })
-        mainCard.startAnimation(anim)
-    }
-
-    /**
-     * identifyCaller()
-     * ----------------
-     * 1. Checks Local Contacts first (Fastest).
-     * 2. If not found locally, queries the Node.js Server.
-     * 3. Updates the UI based on the result.
-     */
-    private fun identifyCaller(number: String, passedName: String?) {
-        CoroutineScope(Dispatchers.IO).launch {
+    private fun identifyCaller(number: String, passedName: String?, userHasGoldFeature: Boolean) {
+        // Cancel any previous job to avoid overlapping data if they call twice fast
+        fetchJob?.cancel() 
+        
+        fetchJob = CoroutineScope(Dispatchers.IO).launch {
             val rawNum = number.replace(Regex("[^0-9]"), "")
             val last10 = if (rawNum.length >= 10) rawNum.takeLast(10) else rawNum
             
-            // A. LOCAL CHECK: Do we already have this contact?
-            val localContact = getLocalContactInfo(number)
+            val localJob = async { getLocalContactInfo(number) }
+            val serverJob = async { 
+                var res = fetchFromServer("91$last10")
+                if (res == null || !res.found) res = fetchFromServer(last10)
+                res
+            }
+
+            val localContact = localJob.await()
+            var currentName = passedName ?: "Unknown Caller"
+            var isSavedLocally = false
+
             if (localContact != null) {
-                withContext(Dispatchers.Main) {
-                    updateUI(localContact.name, localContact.photoUri, null, isSpam = false, isSaved = true)
-                }
-                return@launch
-            }
-
-            // B. SERVER CHECK: Ask the API
-            // Try with '91' prefix first (common in India)
-            val queryWithCode = "91$last10"
-            var result = fetchFromServer(queryWithCode)
-            
-            // If failed, try exactly 10 digits
-            if (result == null || !result.found) {
-                 val retryResult = fetchFromServer(last10)
-                 if (retryResult != null && retryResult.found) result = retryResult
-            }
-
-            // C. UPDATE UI
-            withContext(Dispatchers.Main) {
-                if (result != null && result.found) {
-                    // Success: Show Name, Photo, and Spam Status
-                    updateUI(result.name, null, result.bitmap, isSpam = result.isSpam, isSaved = false)
-                } else if (result != null && result.errorMessage != null) {
-                    // Network Error
-                    updateUI("Error: ${result.errorMessage}", null, null, isSpam = true, isSaved = false)
-                } else {
-                    // Unknown Number
-                    val finalName = if (!passedName.isNullOrEmpty() && passedName != "Unknown") passedName else "Unknown Caller"
-                    updateUI(finalName, null, null, isSpam = false, isSaved = false)
-                }
-            }
-        }
-    }
-
-    /**
-     * Performs the HTTP Request to your Node.js Backend
-     */
-    private fun fetchFromServer(queryNumber: String): ServerResult? {
-        try {
-            val urlString = "$SERVER_URL?number=$queryNumber"
-            val url = URL(urlString)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 3000 // 3 seconds timeout
-            connection.readTimeout = 3000
-            
-            val code = connection.responseCode
-            if (code == 200) {
-                val stream = connection.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(stream)
+                isSavedLocally = true
+                currentName = localContact.name
                 
-                if (json.optBoolean("found", false)) {
-                    val name = json.optString("name", "Unknown")
-                    val isSpam = json.optBoolean("isSpam", false)
-                    val photoBase64 = json.optString("photo", "")
-                    
-                    // Decode Base64 Image if available
-                    var apiBitmap: Bitmap? = null
-                    if (photoBase64.isNotEmpty()) {
-                        try {
-                            val decodedString = Base64.decode(photoBase64, Base64.DEFAULT)
-                            apiBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
-                        } catch (e: Exception) {}
+                if (isActive) { // Check if coroutine is still alive before updating UI
+                    withContext(Dispatchers.Main) {
+                        updateUI(currentName, localContact.photoUri, null, isSpam = false, isPremiumCaller = false, isVerifiedUser = false, isSaved = true, forceGold = userHasGoldFeature)
                     }
-                    return ServerResult(true, name, isSpam, apiBitmap, null)
-                } else {
-                    return ServerResult(false, null, false, null, null)
                 }
-            } else {
-                return ServerResult(false, null, false, null, "HTTP $code")
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return ServerResult(false, null, false, null, e.message ?: "Connect Fail")
+
+            val result = serverJob.await()
+
+            if (isActive) { // Safety check
+                withContext(Dispatchers.Main) {
+                    if (result != null && result.found) {
+                        val finalName = if (isSavedLocally) currentName else (result.name ?: currentName)
+                        updateUI(
+                            name = finalName, 
+                            photoUri = if (isSavedLocally) localContact?.photoUri else null, 
+                            photoBitmap = result.bitmap, 
+                            isSpam = result.isSpam, 
+                            isPremiumCaller = result.isPremiumUser, 
+                            isVerifiedUser = result.isVerifiedUser,
+                            isSaved = isSavedLocally,
+                            forceGold = userHasGoldFeature
+                        )
+                    } else if (!isSavedLocally) {
+                        updateUI(currentName, null, null, isSpam = false, isPremiumCaller = false, isVerifiedUser = false, isSaved = false, forceGold = userHasGoldFeature)
+                    }
+                }
+            }
         }
     }
 
-    // Simple Data Class to hold API response
-    data class ServerResult(
-        val found: Boolean,
-        val name: String?,
-        val isSpam: Boolean,
-        val bitmap: Bitmap?,
-        val errorMessage: String?
-    )
-
-    /**
-     * Updates the UI (Colors, Text, Avatar) based on data
-     */
-    private fun updateUI(name: String?, photoUri: String?, photoBitmap: Bitmap?, isSpam: Boolean, isSaved: Boolean) {
+    private fun updateUI(name: String?, photoUri: String?, photoBitmap: Bitmap?, isSpam: Boolean, isPremiumCaller: Boolean, isVerifiedUser: Boolean, isSaved: Boolean, forceGold: Boolean) {
         val displayName = name ?: "Unknown Caller"
         txtName.text = displayName
+        premiumBadge.visibility = View.GONE
         
-        // Color Logic: Red for Spam/Error, Blue for Safe/Saved
-        if (isSpam || displayName.startsWith("Error:")) {
-            headerContainer.setBackgroundColor(COLOR_RED)
-            txtTopInfo.text = if (displayName.startsWith("Error:")) "Connection Error" else "Likely Spam"
-            txtAvatarFallback.setTextColor(COLOR_RED)
-        } else {
-            headerContainer.setBackgroundColor(COLOR_BLUE)
-            txtTopInfo.text = if (isSaved) "Saved Contact" else "Global Directory"
-            txtAvatarFallback.setTextColor(COLOR_BLUE)
+        val headerPrefix = if (isAfterCall) "Call ended • ${formatDuration(callDurationSeconds)}" else "QCALL • Incoming Call"
+
+        when {
+            isSpam -> applySolidTheme(COLOR_SPAM_RED, "Likely Spam • $headerPrefix")
+            isPremiumCaller || forceGold -> {
+                applyShinyGoldTheme("👑 Premium Gold • $headerPrefix")
+                premiumBadge.visibility = View.VISIBLE
+            }
+            isVerifiedUser -> applySolidTheme(COLOR_VERIFIED_GREEN, "Verified QCall User • $headerPrefix")
+            else -> applySolidTheme(COLOR_SAFE_BLUE, if(isSaved) "Saved Contact • $headerPrefix" else headerPrefix)
         }
 
-        // Avatar Logic
+        updateAvatar(displayName, photoUri, photoBitmap)
+    }
+
+    private fun applySolidTheme(color: Int, topText: String) {
+        headerContainer.background = android.graphics.drawable.ColorDrawable(color)
+        txtTopInfo.text = topText
+        txtName.setTextColor(Color.WHITE)
+        txtTopInfo.setTextColor(Color.WHITE)
+        txtAvatarFallback.setTextColor(color) 
+        txtNumber.setTextColor(Color.parseColor("#E6FFFFFF"))
+    }
+
+    private fun applyShinyGoldTheme(topText: String) {
+        val goldColors = intArrayOf(
+            Color.parseColor("#E1C470"),
+            Color.parseColor("#FBE493"),
+            Color.parseColor("#C59937") 
+        )
+        val gradient = GradientDrawable(GradientDrawable.Orientation.TL_BR, goldColors)
+        headerContainer.background = gradient
+
+        txtTopInfo.text = topText
+        
+        val darkBrown = Color.parseColor("#2C271E")
+        val fadedBrown = Color.parseColor("#5A5243")
+        
+        txtName.setTextColor(darkBrown)
+        txtTopInfo.setTextColor(fadedBrown)
+        txtNumber.setTextColor(fadedBrown)
+        txtAvatarFallback.setTextColor(Color.parseColor("#C59937"))
+    }
+
+    private fun updateAvatar(displayName: String, photoUri: String?, photoBitmap: Bitmap?) {
         imgAvatar.visibility = View.GONE
         txtAvatarFallback.visibility = View.VISIBLE
         
@@ -367,44 +315,105 @@ class CallerIdActivity : AppCompatActivity() {
                 txtAvatarFallback.visibility = View.GONE
                 imgAvatar.setImageURI(Uri.parse(photoUri))
             } else {
-                showFallbackText(displayName)
+                val letter = if (displayName.isNotEmpty()) displayName.substring(0, 1).uppercase(Locale.getDefault()) else "?"
+                txtAvatarFallback.text = letter
             }
         } catch (e: Exception) {
-            showFallbackText(displayName)
+            txtAvatarFallback.text = "?"
         }
     }
 
-    private fun showFallbackText(name: String) {
-        imgAvatar.visibility = View.GONE
-        txtAvatarFallback.visibility = View.VISIBLE
-        val letter = if (name.isNotEmpty()) name.substring(0, 1).uppercase(Locale.getDefault()) else "?"
-        txtAvatarFallback.text = letter
-    }
-
-    // --- Local Contact Lookup ---
-    data class LocalContact(val name: String, val photoUri: String?)
-
-    private fun getLocalContactInfo(phoneNumber: String): LocalContact? {
-        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            return null
-        }
-        var contact: LocalContact? = null
+    private fun fetchFromServer(queryNumber: String): ServerResult? {
         try {
-            // Query the phone's internal database
-            val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
-            val projection = arrayOf(
-                ContactsContract.PhoneLookup.DISPLAY_NAME,
-                ContactsContract.PhoneLookup.PHOTO_URI
-            )
-            val cursor = contentResolver.query(uri, projection, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val name = it.getString(0)
-                    val photo = it.getString(1)
-                    contact = LocalContact(name, photo)
+            val url = URL("$SERVER_URL?number=$queryNumber")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            
+            if (connection.responseCode == 200) {
+                val stream = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(stream)
+                
+                if (json.optBoolean("found", false)) {
+                    val name = json.optString("name", "Unknown")
+                    val isSpam = json.optBoolean("isSpam", false)
+                    val isPremiumUser = json.optBoolean("isPremium", false) 
+                    val isVerifiedUser = json.optBoolean("isVerified", false)
+                    
+                    val photoBase64 = json.optString("photo", "")
+                    var apiBitmap: Bitmap? = null
+                    if (photoBase64.isNotEmpty()) {
+                        try {
+                            val decodedString = Base64.decode(photoBase64, Base64.DEFAULT)
+                            apiBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                        } catch (e: Exception) {}
+                    }
+                    return ServerResult(true, name, isSpam, isPremiumUser, isVerifiedUser, apiBitmap, null)
                 }
             }
+        } catch (e: Exception) { Log.e(TAG, "Fetch Error", e) }
+        return ServerResult(false, null, false, false, false, null, null)
+    }
+
+    data class ServerResult(val found: Boolean, val name: String?, val isSpam: Boolean, val isPremiumUser: Boolean, val isVerifiedUser: Boolean, val bitmap: Bitmap?, val errorMessage: String?)
+
+    private fun getLocalContactInfo(phoneNumber: String): LocalContact? {
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
+        try {
+            val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phoneNumber))
+            val cursor = contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME, ContactsContract.PhoneLookup.PHOTO_URI), null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) return LocalContact(it.getString(0), it.getString(1))
+            }
         } catch (e: Exception) { e.printStackTrace() }
-        return contact
+        return null
+    }
+
+    data class LocalContact(val name: String, val photoUri: String?)
+
+    private fun formatDuration(seconds: Int): String {
+        if (seconds == 0) return "0s"
+        val m = seconds / 60
+        val s = seconds % 60
+        return if (m > 0) "${m}m ${s}s" else "${s}s"
+    }
+
+    // 🟢 BUG FIX: Prevent crashes if a user's phone cannot handle the Deep Link
+    private fun openDeepLink(link: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            closeOverlay()
+        } catch (e: Exception) { 
+            Log.e(TAG, "Error opening link: No app found to handle $link", e) 
+        }
+    }
+
+    private fun showCard() {
+        mainCard.visibility = View.VISIBLE
+        val anim = AnimationUtils.loadAnimation(this, R.anim.slide_in_bottom)
+        mainCard.startAnimation(anim)
+    }
+
+    private fun closeOverlay() {
+        val anim = AnimationUtils.loadAnimation(this, R.anim.slide_out_bottom)
+        anim.setAnimationListener(object : Animation.AnimationListener {
+            override fun onAnimationStart(animation: Animation?) {}
+            override fun onAnimationRepeat(animation: Animation?) {}
+            override fun onAnimationEnd(animation: Animation?) {
+                mainCard.visibility = View.GONE
+                finishAndRemoveTask()
+                overridePendingTransition(0, 0)
+            }
+        })
+        mainCard.startAnimation(anim)
+    }
+
+    // 🟢 BUG FIX: Ensure background tasks are killed when the screen is destroyed
+    override fun onDestroy() {
+        super.onDestroy()
+        fetchJob?.cancel()
     }
 }

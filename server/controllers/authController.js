@@ -1,4 +1,3 @@
-// File: server/controllers/authController.js
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
@@ -7,7 +6,6 @@ exports.checkUser = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
     const user = await User.findOne({ phoneNumber });
-    // Returns true if user exists, false if new
     res.json({ exists: !!user }); 
   } catch (err) {
     console.error("Check User Error:", err);
@@ -26,14 +24,27 @@ exports.login = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Generate Token
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "secret", { expiresIn: "30d" });
+    // Determine if Premium is active based on the expiration date
+    let isPremiumActive = false;
+    if (user.subscription && user.subscription.expiresAt) {
+      if (new Date() < new Date(user.subscription.expiresAt)) {
+        isPremiumActive = true;
+      }
+    }
 
-    // Return Data
+    // Generate Token
+    const token = jwt.sign(
+      { id: user._id }, 
+      process.env.JWT_SECRET || "secret", 
+      { expiresIn: "30d" }
+    );
+
+    // Return Data including the subscription object for the 24-hour sync
     res.json({ 
       message: "Login successful", 
       token, 
-      user 
+      user,
+      isPremiumActive // Helper boolean for frontend
     });
 
   } catch (err) {
@@ -45,30 +56,39 @@ exports.login = async (req, res) => {
 // 3. REGISTER (New User)
 exports.register = async (req, res) => {
   try {
-    const { phoneNumber, name, email } = req.body;
+    const { phoneNumber, firstName, lastName, email } = req.body;
 
-    // Double Check: Does user already exist?
+    // Check if user already exists
     let user = await User.findOne({ phoneNumber });
     if (user) {
       return res.status(400).json({ message: "User already exists. Please login." });
     }
 
-    // Create New User
+    // Create New User with default Free subscription
     user = new User({
       phoneNumber,
-      name,
+      firstName,
+      lastName,
       email,
-      password: "otp_user", // Placeholder
-      qrCodeId: "QR_" + phoneNumber // Custom Logic
+      password: "otp_user", 
+      qrCodeId: "QR_" + phoneNumber,
+      subscription: {
+        status: 'none',
+        planName: 'Free',
+        activeFeatures: [],
+        expiresAt: null
+      }
     });
 
     await user.save();
-    console.log(`\n🆕 NEW USER REGISTERED: ${name} (${phoneNumber})`);
-
+    
     // Generate Token
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "secret", { expiresIn: "30d" });
+    const token = jwt.sign(
+      { id: user._id }, 
+      process.env.JWT_SECRET || "secret", 
+      { expiresIn: "30d" }
+    );
 
-    // Return Data
     res.status(201).json({ 
       message: "User created successfully", 
       token, 

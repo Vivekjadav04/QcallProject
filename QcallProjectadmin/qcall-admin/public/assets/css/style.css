@@ -1,0 +1,249 @@
+/* ==========================================================================
+   1. 🎨 MODERN VARIABLES
+   ========================================================================== */
+:root {
+    --primary: #6366f1;       /* Indigo */
+    --primary-hover: #4f46e5;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --dark: #0f172a;
+    --bg-body: #f8fafc;       /* Light Slate */
+    --text-muted: #64748b;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+    --shadow-card: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --shadow-glow: 0 0 15px rgba(99, 102, 241, 0.2);
+}
+
+body {
+    background-color: var(--bg-body);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--dark);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.container-fluid {
+    flex: 1; /* Pushes footer to bottom */
+}
+
+/* ==========================================================================
+   2. 🔐 OUTSTANDING LOGIN PAGE
+   ========================================================================== */
+.login-body {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Floating Background Shapes */
+.shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: 0;
+    opacity: 0.6;
+    animation: float 10s infinite ease-in-out;
+}
+.shape-1 {
+    width: 400px; height: 400px;
+    background: #c7d2fe; /* Soft Indigo */
+    top: -50px; left: -100px;
+}
+.shape-2 {
+    width: 350px; height: 350px;
+    background: #fecaca; /* Soft Red */
+    bottom: -50px; right: -100px;
+    animation-delay: 2s;
+}
+
+@keyframes float {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, 40px); }
+}
+
+.login-container { z-index: 10; width: 100%; max-width: 420px; padding: 15px; }
+
+.glass-login {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 24px;
+}
+
+.logo-circle {
+    width: 80px; height: 80px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+}
+
+.btn-login {
+    background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+    border: none;
+    transition: transform 0.2s;
+}
+.btn-login:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4); }
+
+/* ==========================================================================
+   3. ✨ HEADER & DASHBOARD
+   ========================================================================== */
+
+/* Glass Navbar - Only applied here */
+.glass-header {
+    background: rgba(30, 41, 59, 0.95) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Dashboard Stat Cards */
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card), var(--shadow-glow);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* Chart Canvas Fixes */
+canvas {
+    max-width: 100%;
+}
+
+/* ==========================================================================
+   4. 🚀 OPTIMIZED TABLES
+   ========================================================================== */
+
+.card {
+    background: white;
+    border: none;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+}
+
+.table { margin-bottom: 0; }
+
+/* FAST Hover Effect */
+table.table-hover tbody tr {
+    transition: background-color 0.1s ease;
+}
+
+table.table-hover tbody tr:hover {
+    background-color: #f1f5f9 !important;
+}
+
+/* Badges */
+.badge {
+    padding: 0.5em 0.8em;
+    font-weight: 600;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+}
+
+/* ==========================================================================
+   5. ✅ ICONS & SKELETON LOADING
+   ========================================================================== */
+i.ph, i.ph-fill, i.ph-bold {
+    vertical-align: middle;
+    line-height: 1;
+    display: inline-block;
+    position: relative;
+    top: -1px;
+}
+
+/* Beam Animation */
+.skeleton {
+    background-color: #e2e8f0;
+    position: relative;
+    overflow: hidden;
+    border-radius: 6px;
+}
+
+.skeleton::after {
+    content: "";
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0,
+        rgba(255, 255, 255, 0.5) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    100% { transform: translateX(100%); }
+}
+
+.skeleton-text { height: 14px; margin-bottom: 8px; }
+.skeleton-h1 { height: 32px; width: 60%; margin-bottom: 10px; }
+.skeleton-avatar { width: 35px; height: 35px; border-radius: 50%; }
+
+/* ==========================================================================
+   6. 🦶 MODERN FOOTER & ANIMATIONS
+   ========================================================================== */
+.admin-footer {
+    background: white;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    padding: 1.5rem 0;
+    margin-top: auto; 
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    position: relative;
+    z-index: 10;
+}
+
+.footer-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+    font-weight: 500;
+}
+.footer-link:hover { color: var(--primary); }
+
+.status-dot {
+    height: 8px; width: 8px;
+    background-color: var(--success);
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.stagger-row {
+    animation: fadeIn 0.3s ease-out forwards;
+    opacity: 0;
+}
+
+@keyframes fadeIn {
+    to { opacity: 1; }
+}
+
+.btn:active { transform: scale(0.97); }

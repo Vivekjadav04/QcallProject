@@ -1,21 +1,20 @@
 package com.rkgroup.qcall
 
-import android.app.Activity
 import android.app.NotificationManager
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings 
 import android.telecom.TelecomManager
 import android.util.Log
-import androidx.appcompat.app.AppCompatActivity
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.rkgroup.qcall.native_telephony.QCallInCallService
 import com.rkgroup.qcall.helpers.NotificationHelper 
-import com.rkgroup.qcall.helpers.BlockDataBridge // 🟢 Added for SharedPreferences sync
+import com.rkgroup.qcall.helpers.BlockDataBridge 
 import com.rkgroup.qcall.new_overlay.CallerIdActivity 
 
 class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -44,13 +43,32 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
 
     override fun getName(): String = "CallManagerModule"
 
-    // 🟢 NEW: Sync Block Status to SharedPreferences
+    // 🟢 UPDATED: Automatic 24-Hour Sync Logic
+    // Features: Array of feature keys (e.g., ["no_ads", "golden_caller_id"])
+    // timestamp: The time in milliseconds when the API was fetched
+    @ReactMethod
+    fun syncPremiumFeatures(features: ReadableArray, timestamp: Double) {
+        val sharedPref: SharedPreferences = reactApplicationContext.getSharedPreferences("QcallPrefs", Context.MODE_PRIVATE)
+        val editor = sharedPref.edit()
+        
+        val featureSet = mutableSetOf<String>()
+        for (i in 0 until features.size()) {
+            features.getString(i)?.let { featureSet.add(it) }
+        }
+        
+        // Save both the features and the time they were fetched
+        editor.putStringSet("allowedFeatures", featureSet)
+        editor.putLong("lastPremiumSync", timestamp.toLong())
+        editor.apply()
+        
+        Log.d(TAG, "Premium Synced | Features: $featureSet | Time: ${timestamp.toLong()}")
+    }
+
     @ReactMethod
     fun syncBlockToNative(number: String, isBlocked: Boolean) {
         BlockDataBridge.syncBlockStatus(reactApplicationContext, number, isBlocked)
     }
 
-    // 🧪 TESTING METHOD: Check SharedPreferences from React Native
     @ReactMethod
     fun isNumberBlockedNative(number: String, promise: Promise) {
         try {
@@ -62,14 +80,10 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     }
 
     @ReactMethod
-    fun answerCall() {
-        QCallInCallService.answerCurrentCall()
-    }
+    fun answerCall() { QCallInCallService.answerCurrentCall() }
 
     @ReactMethod
-    fun endCall() {
-        QCallInCallService.hangupCurrentCall()
-    }
+    fun endCall() { QCallInCallService.hangupCurrentCall() }
 
     @ReactMethod
     fun startCall(number: String) {
@@ -78,22 +92,16 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         try {
             val tm = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
             tm.placeCall(uri, null)
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Permission Error: ${e.message}")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting call: ${e.message}")
         }
     }
 
     @ReactMethod
-    fun setMuted(muted: Boolean) {
-        QCallInCallService.instance?.setMuted(muted)
-    }
+    fun setMuted(muted: Boolean) { QCallInCallService.instance?.setMuted(muted) }
 
     @ReactMethod
-    fun setSpeakerphoneOn(on: Boolean) {
-        QCallInCallService.toggleSpeaker(on)
-    }
+    fun setSpeakerphoneOn(on: Boolean) { QCallInCallService.toggleSpeaker(on) }
 
     @ReactMethod
     fun checkOverlayPermission(promise: Promise) {
@@ -133,12 +141,10 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     fun requestDefaultDialer(promise: Promise) {
         val activity = reactApplicationContext.currentActivity
         val context = reactApplicationContext
-
         if (activity == null) {
             promise.reject("ACTIVITY_NULL", "Activity is null")
             return
         }
-
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val roleManager = context.getSystemService(Context.ROLE_SERVICE) as RoleManager
@@ -156,49 +162,50 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
     }
 
     @ReactMethod
-    fun launchTestIncomingUI(name: String, number: String) {
+    fun testIncomingOverlay(testNumber: String) {
+        val context = reactApplicationContext
         try {
-            val intent = Intent(reactApplicationContext, CallerIdActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("number", number) 
-                putExtra("name", name)
+            val intent = Intent(context, CallerIdActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                putExtra("number", testNumber)
+                putExtra("name", "Test Caller")
+                putExtra("isAfterCall", false)
             }
-            reactApplicationContext.startActivity(intent)
+            context.startActivity(intent)
         } catch (e: Exception) {
-            Log.e(TAG, "Error launching Incoming UI: ${e.message}")
+            e.printStackTrace()
         }
     }
 
     @ReactMethod
-    fun launchTestOutgoingUI(name: String, number: String) {
+    fun testAfterCallOverlay(testNumber: String, durationInSeconds: Int) {
+        val context = reactApplicationContext
         try {
-            val intent = Intent(reactApplicationContext, com.rkgroup.qcall.CallActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                putExtra("contact_name", name)
-                putExtra("contact_number", number)
-                putExtra("call_status", "Active")
+            val intent = Intent(context, CallerIdActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                putExtra("number", testNumber)
+                putExtra("name", "Test Caller")
+                putExtra("isAfterCall", true)
+                putExtra("duration", durationInSeconds)
             }
-            reactApplicationContext.startActivity(intent)
+            context.startActivity(intent)
         } catch (e: Exception) {
-            Log.e(TAG, "Error launching Outgoing UI: ${e.message}")
+            e.printStackTrace()
         }
     }
 
     @ReactMethod
-    fun showTestNotification(name: String, number: String) {
-        try {
-            val context = reactApplicationContext
-            NotificationHelper.createNotificationChannel(context)
-            
-            val notification = NotificationHelper.createIncomingCallNotification(context, name, number, null)
-            
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.notify(NotificationHelper.NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error showing test notification: ${e.message}")
-        }
+    fun simulateIncomingNotification(name: String, number: String) {
+        val context = reactApplicationContext
+        NotificationHelper.showTestNotification(context, name, number)
     }
-    
+
+    @ReactMethod
+    fun cancelIncomingNotification() {
+        val context = reactApplicationContext
+        NotificationHelper.cancelTestNotification(context)
+    }
+
     @ReactMethod
     fun addListener(eventName: String) {}
     @ReactMethod

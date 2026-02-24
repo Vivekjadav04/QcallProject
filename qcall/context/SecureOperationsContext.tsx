@@ -3,11 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { API_BASE_URL } from '../constants/config';
 
-// 🟢 UPDATED: Define the shape of our context with unblockNumber
+// 🟢 UPDATED: reportSpam now returns an object with success status and a message
 interface SecureOperationsType {
   blockNumber: (number: string, alsoReport: boolean) => Promise<boolean>;
-  unblockNumber: (number: string) => Promise<boolean>; // Added this
-  reportSpam: (number: string, category: string) => Promise<boolean>;
+  unblockNumber: (number: string) => Promise<boolean>; 
+  reportSpam: (number: string, category: string, comment: string, location: string) => Promise<{ success: boolean; message: string }>;
   markAsSafe: (number: string) => Promise<boolean>;
   getPrivateProfile: (number: string) => Promise<any>;
 }
@@ -16,7 +16,7 @@ const SecureOperationsContext = createContext<SecureOperationsType | undefined>(
 
 export const SecureOperationsProvider = ({ children }: { children: ReactNode }) => {
 
-  // 🔒 HELPER: The "Key Fetcher"
+  // 🔒 HELPER: Fetches Auth Token
   const getAuthHeaders = async () => {
     try {
       const t1 = await AsyncStorage.getItem('user_token');
@@ -63,7 +63,7 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
     }
   };
 
-  // 🟢 FEATURE 1.5: UNBLOCK (The New Sync Logic)
+  // 🟢 FEATURE 1.5: UNBLOCK
   const unblockNumber = async (number: string) => {
     const headers = await getAuthHeaders();
     if (!headers) {
@@ -92,12 +92,11 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
     }
   };
 
-  // 🔴 FEATURE 2: REPORT SPAM
-  const reportSpam = async (number: string, category: string) => {
+  // 🔴 FEATURE 2: REPORT SPAM (🟢 FIXED to handle 400 errors and duplicate reports)
+  const reportSpam = async (number: string, category: string, comment: string, location: string) => {
     const headers = await getAuthHeaders();
     if (!headers) {
-      Alert.alert("Authentication Required", "Please log in to report spam.");
-      return false;
+      return { success: false, message: "Please log in to report spam." };
     }
 
     try {
@@ -105,17 +104,29 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
         method: 'POST',
         headers: headers,
         body: JSON.stringify({ 
-            number, 
+            phoneNumber: number, 
             tag: category, 
-            location: "Unknown", 
-            comment: `Reported as ${category}` 
+            location: location, 
+            comment: comment 
         }),
       });
 
-      if (response.ok) return true;
-      return false;
+      // 🟢 Parse the response first to get the server's message
+      const data = await response.json();
+
+      if (response.ok) {
+          return { success: true, message: data.msg || "Report submitted successfully." };
+      }
+      
+      // 🟢 Capture 400 Bad Request messages (like "You have already reported this number")
+      return { 
+        success: false, 
+        message: data.msg || data.message || "Could not submit report." 
+      };
+
     } catch (e) {
-      return false;
+      console.error("reportSpam Error:", e);
+      return { success: false, message: "Network request failed. Please check your connection." };
     }
   };
 
@@ -139,7 +150,7 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
     }
   };
 
-  // 🔵 FEATURE 4: GET PROFILE (With Auth)
+  // 🔵 FEATURE 4: GET PROFILE
   const getPrivateProfile = async (number: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/contacts/identify?number=${number}`);
@@ -152,7 +163,7 @@ export const SecureOperationsProvider = ({ children }: { children: ReactNode }) 
   return (
     <SecureOperationsContext.Provider value={{ 
         blockNumber, 
-        unblockNumber, // Added to Provider
+        unblockNumber, 
         reportSpam, 
         markAsSafe, 
         getPrivateProfile 

@@ -8,6 +8,7 @@ import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; 
 import { StatusBar } from 'expo-status-bar'; 
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 🟢 ADDED FOR BULLETPROOF AD CHECK
 
 // @ts-ignore
 import CallLogs from 'react-native-call-log';
@@ -17,12 +18,14 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth'; 
 import { CallService } from '../../services/CallService'; 
 import { SyncService } from '../../services/SyncService'; 
+// 🟢 IMPORTED THE NEW FORCE SYNC
+import { checkAndSyncPremium, forceSyncPremium } from '../../services/PremiumSync'; 
 import { apiService } from '../../services/api'; 
 import DialerModal from '../../components/DialerModal'; 
 import { useCustomAlert } from '../../context/AlertContext';
 
 const { CallManagerModule } = NativeModules;
-const { width } = Dimensions.get('window'); // 🟢 Added Width for Ad Calculation
+const { width } = Dimensions.get('window');
 const BATCH_SIZE = 40; 
 
 const THEME = {
@@ -40,7 +43,6 @@ const THEME = {
   }
 };
 
-// 🟢 AD IMAGES CONSTANT
 const AD_IMAGES = [
   'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=500&q=80',
   'https://images.unsplash.com/photo-1573806119002-3b145202636a?w=500&q=80',
@@ -48,14 +50,12 @@ const AD_IMAGES = [
   'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500&q=80',
 ];
 
-// 🟢 NEW SCROLLING AD COMPONENT
 const ScrollingAdBanner = () => {
   const scrollX = useRef(new Animated.Value(0)).current;
   const itemWidth = width * 0.75;
 
   useEffect(() => {
     const totalScrollWidth = itemWidth * AD_IMAGES.length;
-    
     const startScroll = () => {
       scrollX.setValue(0);
       Animated.loop(
@@ -76,7 +76,6 @@ const ScrollingAdBanner = () => {
         <View style={styles.adLabelBox}><Text style={styles.adLabelText}>Ad</Text></View>
         <Text style={styles.adBrandText}>Google Ads Sponsored</Text>
       </View>
-      
       <View style={styles.adClipContainer}>
         <Animated.View style={[styles.adScrollRow, { transform: [{ translateX: scrollX }] }]}>
           {[...AD_IMAGES, ...AD_IMAGES].map((uri, idx) => (
@@ -86,7 +85,6 @@ const ScrollingAdBanner = () => {
           ))}
         </Animated.View>
       </View>
-
       <TouchableOpacity style={styles.adCtaBtn} activeOpacity={0.8} onPress={() => Linking.openURL('https://google.com')}>
         <Text style={styles.adCtaText}>Visit Store</Text>
         <Feather name="external-link" size={12} color="#FFF" />
@@ -95,7 +93,6 @@ const ScrollingAdBanner = () => {
   );
 };
 
-// ... (Rest of your existing helper functions: getLast10, getAvatarStyle, formatTime, getDayLabel, SkeletonCallLog) ...
 const getLast10 = (num: string) => {
   if (!num) return '';
   return num.replace(/\D/g, '').slice(-10);
@@ -147,9 +144,36 @@ const SkeletonCallLog = () => {
   );
 };
 
-// --- HEADER COMPONENT (Standardized) ---
-const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress, onFilterPress, currentFilter }: any) => {
+// --- HEADER COMPONENT ---
+const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress, onFilterPress, currentFilter, hideAds }: any) => {
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const triggerIncomingTest = () => {
+    const testNumber = "+919924162171"; 
+    if (CallManagerModule && CallManagerModule.testIncomingOverlay) {
+      CallManagerModule.testIncomingOverlay(testNumber);
+    }
+  };
+
+  const triggerAfterCallTest = () => {
+    const testNumber = "+917908085267"; 
+    if (CallManagerModule && CallManagerModule.testAfterCallOverlay) {
+      CallManagerModule.testAfterCallOverlay(testNumber, 135); 
+    }
+  };
+
+  const triggerNotificationTest = () => {
+    if (CallManagerModule && CallManagerModule.simulateIncomingNotification) {
+      CallManagerModule.simulateIncomingNotification("Rakib SK", "+91 7908085267");
+    }
+  };
+
+  const cancelNotificationTest = () => {
+    if (CallManagerModule && CallManagerModule.cancelIncomingNotification) {
+      CallManagerModule.cancelIncomingNotification();
+    }
+  };
+
   return (
     <View style={styles.headerWrapper}>
       <View style={styles.topRow}>
@@ -181,14 +205,34 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
         </TouchableOpacity>
       </View>
 
-      {/* 🟢 INSERTED: Auto-Scrolling Ad Component */}
-      <ScrollingAdBanner />
+      {/* 🟢 CONDITIONAL AD RENDER */}
+      {!hideAds && <ScrollingAdBanner />}
+
+      {/* 🟢 DEVELOPER UI TESTS (Commented out for production, kept for future testing)
+      <View style={styles.devToolsContainer}>
+        <Text style={styles.devToolsTitle}>🧪 Developer UI Tests</Text>
+        <View style={styles.devToolsRow}>
+          <TouchableOpacity style={styles.devBtnBlue} onPress={triggerIncomingTest}>
+            <Text style={styles.devBtnText}>Overlay</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.devBtnGreen} onPress={triggerAfterCallTest}>
+            <Text style={styles.devBtnText}>Call Ended</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.devToolsRow, { marginTop: 8 }]}>
+          <TouchableOpacity style={styles.devBtnPurple} onPress={triggerNotificationTest}>
+            <Text style={styles.devBtnText}>Notification</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.devBtnRed} onPress={cancelNotificationTest}>
+            <Text style={styles.devBtnText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      */}
+
     </View>
   );
 });
-
-// ... (Rest of your original code: CallLogItem, CallLogScreen logic, and styles) ...
-// NOTE: I am pasting the rest exactly as it was, with ONLY the new ad styles added at the bottom.
 
 const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress }: any) => {
   const isMissed = item.type === 'missed';
@@ -247,6 +291,7 @@ const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress }: any) =
 export default function CallLogScreen() {
   const router = useRouter(); 
   const insets = useSafeAreaInsets();
+  
   const { user } = useAuth(); 
   const { showAlert } = useCustomAlert();
   
@@ -263,13 +308,40 @@ export default function CallLogScreen() {
   const [searchText, setSearchText] = useState('');
   const [permissionGranted, setPermissionGranted] = useState(false);
 
+  // 🟢 BULLETPROOF AD REMOVAL LOGIC
+  const [hasNoAds, setHasNoAds] = useState(false);
+
+  useEffect(() => {
+    const checkPremiumStatus = async () => {
+      // 1. Check the new subscription features array
+      const hasFeature = user?.subscription?.activeFeatures?.includes('no_ads');
+      // 2. Fallback: Check old legacy accountType
+      const isLegacyPremium = user?.accountType === 'gold' || user?.accountType === 'platinum';
+      // 3. Fallback: Check local cache
+      const cachedFeatures = await AsyncStorage.getItem('@active_features');
+      const cachedHasFeature = cachedFeatures ? cachedFeatures.includes('no_ads') : false;
+
+      if (hasFeature || isLegacyPremium || cachedHasFeature) {
+        setHasNoAds(true);
+      } else {
+        setHasNoAds(false);
+      }
+    };
+
+    checkPremiumStatus();
+  }, [user]);
+
   useEffect(() => {
     const initSync = async () => {
       const isAuthenticated = await apiService.isAuthenticated();
-      if (isAuthenticated) SyncService.startSync();
+      if (isAuthenticated && user) {
+        if(SyncService.startSync) SyncService.startSync();
+        // 24-hour passive check on boot
+        checkAndSyncPremium(user);
+      }
     };
     initSync();
-  }, []);
+  }, [user]);
 
   const loadContacts = async () => {
     try {
@@ -362,8 +434,22 @@ export default function CallLogScreen() {
     }, [])
   );
 
+  // 🟢 FORCE SYNC ON PULL-TO-REFRESH
   const onRefresh = async () => {
     setRefreshing(true);
+    
+    if (user) {
+      // Bypasses the 24-hour limit and hits the database immediately
+      await forceSyncPremium();
+      
+      // Instantly evaluate ad removal status so the UI updates right now
+      const cachedFeatures = await AsyncStorage.getItem('@active_features');
+      const hasFeature = user?.subscription?.activeFeatures?.includes('no_ads');
+      const isLegacyPremium = user?.accountType === 'gold' || user?.accountType === 'platinum';
+      const cachedHasFeature = cachedFeatures ? cachedFeatures.includes('no_ads') : false;
+      setHasNoAds(!!(hasFeature || isLegacyPremium || cachedHasFeature));
+    }
+
     setDisplayLimit(BATCH_SIZE); 
     setHasMoreLogs(true);
     const loadedMap = await loadContacts(); 
@@ -475,7 +561,7 @@ export default function CallLogScreen() {
     return (
       <View style={styles.container}>
          <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-           <HeaderComponent searchText={searchText} setSearchText={setSearchText} userPhoto={user?.profilePhoto} />
+           <HeaderComponent searchText={searchText} setSearchText={setSearchText} userPhoto={user?.profilePhoto} hideAds={hasNoAds} />
            <View style={{ paddingHorizontal: 20 }}>
               <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Today</Text></View>
               {[1, 2, 3, 4, 5, 6].map((k) => <SkeletonCallLog key={k} />)}
@@ -497,6 +583,7 @@ export default function CallLogScreen() {
            onProfilePress={() => router.push('/profile')} 
            onFilterPress={() => setShowFilterModal(true)}
            currentFilter={filterType}
+           hideAds={hasNoAds}
         />
         
         {!permissionGranted && !isInitialLoading && (
@@ -534,7 +621,6 @@ export default function CallLogScreen() {
           }
         />
 
-        {/* FAB Buttons */}
         <TouchableOpacity 
           style={[styles.fab, { bottom: insets.bottom + 190, backgroundColor: '#3B82F6' }]} 
           onPress={() => router.push('/search')}
@@ -557,7 +643,6 @@ export default function CallLogScreen() {
 
         <DialerModal visible={dialerVisible} onClose={() => setDialerVisible(false)} masterLogs={masterLogs} onCallPress={handleNativeCall} />
         
-        {/* Filter Modal */}
         <Modal transparent visible={showFilterModal} animationType="fade" onRequestClose={() => setShowFilterModal(false)}>
             <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
                 <View style={styles.filterModal}>
@@ -583,35 +668,28 @@ export default function CallLogScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.colors.bg },
-  // 🟢 Standardized Header Wrapper: 24px padding
   headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  // 🟢 Standardized Title: 34px
   headerTitle: { fontSize: 34, fontWeight: '900', color: THEME.colors.primary, letterSpacing: -1 },
   profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
-  // 🟢 Standardized Avatar: 48px
   avatarImage: { width: 48, height: 48, borderRadius: 18, borderWidth: 2, borderColor: '#FFF' },
   avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   
-  // 🟢 Standardized Search: 52px height
   searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
   searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
   filterIcon: { padding: 8, borderRadius: 12 },
   
-  // 🟢 AD COMPONENT STYLES
-  adBannerWrapper: {
-    backgroundColor: '#FFF',
-    marginTop: 20,
-    borderRadius: 20,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
+  devToolsContainer: { marginTop: 16, backgroundColor: '#F1F5F9', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
+  devToolsTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  devToolsRow: { flexDirection: 'row', gap: 10 },
+  devBtnBlue: { flex: 1, backgroundColor: '#3B82F6', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  devBtnGreen: { flex: 1, backgroundColor: '#10B981', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  devBtnPurple: { flex: 1, backgroundColor: '#8B5CF6', paddingVertical: 10, borderRadius: 10, alignItems: 'center' }, 
+  devBtnRed: { flex: 1, backgroundColor: '#EF4444', paddingVertical: 10, borderRadius: 10, alignItems: 'center' }, 
+  devBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+
+  adBannerWrapper: { backgroundColor: '#FFF', marginTop: 20, borderRadius: 20, padding: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   adHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   adLabelBox: { backgroundColor: '#FBBF24', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
   adLabelText: { fontSize: 10, fontWeight: '900', color: '#92400E' },

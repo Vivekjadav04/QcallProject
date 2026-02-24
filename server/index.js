@@ -7,6 +7,7 @@ const dotenv = require('dotenv');
 const authRoutes = require('./routes/auth');
 const contactRoutes = require('./routes/contactRoutes');
 const profileRoutes = require('./routes/profileRoutes'); 
+const planRoutes = require('./routes/planRoutes'); // 🟢 NEW: Import Plan Routes
 
 dotenv.config();
 const app = express();
@@ -28,8 +29,7 @@ const connectDB = async () => {
   }
 };
 
-// 🟢 4. HEALTH GATE (Bulletproof)
-// Responds "OK" to any health check URL the app might use
+// 4. HEALTH GATE (Bulletproof)
 app.get('/', (req, res) => res.status(200).send("Qcall API Running..."));
 app.get('/api', (req, res) => res.status(200).send("Qcall Server is Online 🟢")); 
 app.get('/health', (req, res) => res.status(200).send("OK"));
@@ -39,6 +39,7 @@ app.get('/api/health', (req, res) => res.status(200).send("OK"));
 app.use('/api/auth', authRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/plans', planRoutes); // 🟢 NEW: Register Plan Routes
 
 // 6. START SERVER
 app.listen(PORT, () => {

@@ -5,12 +5,12 @@ const SpamReport = require('../models/SpamReport');
 const BlockedNumber = require('../models/BlockedNumber'); 
 
 // ⚙️ SETTINGS: Change this number to control sensitivity
-const SPAM_THRESHOLD = 50; // Number needs 50 reports to be marked "Spam"
+const SPAM_THRESHOLD = 50; 
 
 // Helper: Clean phone numbers
 const normalizeNumber = (num) => num ? num.replace(/[^\d+]/g, '') : '';
 
-// 🟢 1. IDENTIFY CALLER (Updated with Threshold Logic)
+// 🟢 1. IDENTIFY CALLER (Parallel DB Search + Top Spam Category)
 exports.identifyCaller = async (req, res) => {
   try {
     const rawNum = req.query.number;
@@ -23,26 +23,44 @@ exports.identifyCaller = async (req, res) => {
     const last10 = cleanNum.slice(-10);
     const searchCriteria = { phoneNumber: { $regex: last10, $options: 'i' } };
 
-    // Optimize: Use countDocuments instead of find() for speed
-    const [spamCount, appUser, globalEntry] = await Promise.all([
-        SpamReport.countDocuments(searchCriteria), 
-        User.findOne(searchCriteria),
-        GlobalNumber.findOne(searchCriteria)
+    // 🚀 PARALLEL SEARCH: Get User, Global Number, and Top Spam Tags simultaneously
+    const [appUser, globalEntry, spamData] = await Promise.all([
+        User.findOne(searchCriteria), 
+        GlobalNumber.findOne(searchCriteria),
+        // 🟢 NEW: Aggregation to get Total Count AND the Most Popular Tag
+        SpamReport.aggregate([
+            { $match: searchCriteria },
+            { $facet: {
+                totalReports: [{ $count: "count" }],
+                topTags: [
+                    { $group: { _id: "$tag", count: { $sum: 1 } } },
+                    { $sort: { count: -1 } }, // Sort by highest votes
+                    { $limit: 1 } // Get the #1 most voted tag
+                ]
+            }}
+        ])
     ]);
 
-    // 🚀 NEW LOGIC: Only mark as SPAM if reports exceed threshold or Global DB says so
-    // We calculate a percentage score based on the threshold
+    // Extract Aggregation Results
+    const spamCount = spamData[0]?.totalReports[0]?.count || 0;
+    const topSpamTag = spamData[0]?.topTags[0]?._id || null; 
+
+    // 👑 Premium / Verified Checks
+    const isVerifiedUser = !!appUser;
+    const isPremiumUser = appUser ? ['gold', 'platinum'].includes(appUser.accountType) : false;
+
+    // 🚀 SPAM LOGIC
     let spamScore = 0;
     if (spamCount >= SPAM_THRESHOLD) spamScore = 100;
     else if (spamCount > 0) spamScore = Math.floor((spamCount / SPAM_THRESHOLD) * 100);
 
-    // Override if Global Entry has a locked-in high score
     if (globalEntry && globalEntry.spamScore > spamScore) {
         spamScore = globalEntry.spamScore;
     }
 
-    const isSpam = spamScore >= 80; // Only RED if score is very high
+    const isSpam = spamScore >= 80; 
 
+    // --- CASE A: IT IS SPAM OR HAS REPORTS ---
     if (isSpam || spamCount > 0) {
         let bestName = "Unknown Caller";
         let type = "UNKNOWN";
@@ -56,7 +74,7 @@ exports.identifyCaller = async (req, res) => {
             bestName = globalEntry.likelyName;
         } 
         else if (appUser) {
-            bestName = `${appUser.firstName} ${appUser.lastName}`;
+            bestName = `${appUser.firstName} ${appUser.lastName}`.trim();
             type = "USER";
         }
 
@@ -64,40 +82,66 @@ exports.identifyCaller = async (req, res) => {
             found: true,
             type: type,
             name: bestName,
-            isSpam: isSpam, // Boolean based on threshold
-            spamScore: spamScore, // 0-100
+            isSpam: isSpam, 
+            spamScore: spamScore, 
             spamReports: spamCount,
             location: globalEntry?.location || "",
-            spamType: globalEntry?.tags?.[0] || (isSpam ? "High Risk" : "Reports")
+            // 🟢 Send the community's #1 voted tag to the App (e.g., "Bank Fraud")
+            spamType: topSpamTag || globalEntry?.tags?.[0] || (isSpam ? "High Risk" : "Reports"),
+            isVerified: isVerifiedUser, 
+            isPremium: isPremiumUser,   
+            photo: appUser?.profilePhoto || "" 
         });
     }
 
+    // --- CASE B: IT IS A QCALL APP USER (Safe) ---
     if (appUser) {
         if (appUser.settings?.showCallerID === false) {
-             return res.json({ found: false, type: "PRIVATE", name: "Private Number" });
+             return res.json({ 
+                 found: false, 
+                 type: "PRIVATE", 
+                 name: "Private Number",
+                 isSpam: false,
+                 isVerified: false,
+                 isPremium: false
+             });
         }
         return res.json({
             found: true,
             type: "USER",
             name: `${appUser.firstName} ${appUser.lastName}`.trim(),
-            photo: appUser.profilePhoto,
+            photo: appUser.profilePhoto || "",
             location: appUser.address ? appUser.address.city : "", 
             isSpam: false,
-            isVerified: true
+            isVerified: true,       
+            isPremium: isPremiumUser 
         });
     }
 
+    // --- CASE C: FOUND IN GLOBAL DIRECTORY (Safe) ---
     if (globalEntry) {
         return res.json({
             found: true,
             type: "GLOBAL",
             name: globalEntry.likelyName || "Unknown Caller",
             location: globalEntry.location || "",
-            isSpam: false
+            isSpam: false,
+            isVerified: false,
+            isPremium: false,
+            photo: ""
         });
     }
 
-    return res.json({ found: false, type: "UNKNOWN", name: "Unknown Caller", isSpam: false });
+    // --- CASE D: COMPLETELY UNKNOWN ---
+    return res.json({ 
+        found: false, 
+        type: "UNKNOWN", 
+        name: "Unknown Caller", 
+        isSpam: false,
+        isVerified: false,
+        isPremium: false,
+        photo: ""
+    });
 
   } catch (err) {
     console.error("Identify Error:", err.message);
@@ -127,10 +171,7 @@ exports.syncContacts = async (req, res) => {
     }).filter(o => o);
 
     if (ops.length > 0) await UserContact.bulkWrite(ops);
-    
-    // Fire and forget global name updates
     contacts.forEach(c => updateGlobalName(c.number, c.name));
-    
     res.json({ success: true, count: ops.length });
   } catch (err) {
     console.error("Sync Error:", err.message);
@@ -141,8 +182,8 @@ exports.syncContacts = async (req, res) => {
 // 🟢 3. REPORT SPAM (The "Ballot Box" Logic)
 exports.reportSpam = async (req, res) => {
   try {
-    const { number, tag, location, comment } = req.body;
-    const cleanNum = normalizeNumber(number);
+    const { phoneNumber, tag, location, comment } = req.body; // 🟢 FIX: Ensure it matches the frontend's 'phoneNumber' key
+    const cleanNum = normalizeNumber(phoneNumber || req.body.number); // Fallback just in case
     const userId = req.user ? req.user.id : null;
 
     if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
@@ -153,8 +194,8 @@ exports.reportSpam = async (req, res) => {
             phoneNumber: cleanNum,
             reportedBy: userId,
             tag: tag || "Spam",
-            location,
-            comment
+            location: location || "",
+            comment: comment || ""
         });
     } catch (e) {
         if (e.code === 11000) {
@@ -175,7 +216,7 @@ exports.reportSpam = async (req, res) => {
     await GlobalNumber.findOneAndUpdate(
       { phoneNumber: cleanNum },
       { 
-          $set: { spamScore: newScore, location: location },
+          $set: { spamScore: newScore, location: location || "" },
           $addToSet: { tags: tag || "Spam" },
       },
       { upsert: true }
@@ -198,13 +239,8 @@ exports.reportNotSpam = async (req, res) => {
 
         if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
 
-        // Remove the user's vote
-        await SpamReport.findOneAndDelete({
-            phoneNumber: cleanNum,
-            reportedBy: userId
-        });
+        await SpamReport.findOneAndDelete({ phoneNumber: cleanNum, reportedBy: userId });
 
-        // Recalculate Score from scratch (Safest way)
         const totalReports = await SpamReport.countDocuments({ phoneNumber: cleanNum });
         let newScore = 0;
         if (totalReports >= SPAM_THRESHOLD) newScore = 100;
@@ -216,11 +252,7 @@ exports.reportNotSpam = async (req, res) => {
             { new: true, upsert: true }
         );
 
-        res.json({ 
-            success: true, 
-            msg: "Marked as safe.",
-            newScore: globalEntry.spamScore
-        });
+        res.json({ success: true, msg: "Marked as safe.", newScore: globalEntry.spamScore });
 
     } catch (err) {
         console.error("Safe Mark Error:", err.message);
@@ -243,11 +275,9 @@ exports.blockNumber = async (req, res) => {
     );
 
     if (alsoReportSpam && cleanNum) {
-        // If blocking counts as a spam report, we call the logic manually
-        // But for now, we just increment score slightly
         await GlobalNumber.findOneAndUpdate(
             { phoneNumber: cleanNum },
-            { $inc: { spamScore: 1 } }, // Blocks have less weight than reports
+            { $inc: { spamScore: 1 } },
             { upsert: true }
         );
     }
@@ -266,7 +296,6 @@ exports.unblockNumber = async (req, res) => {
     const cleanNum = normalizeNumber(number);
 
     const deletedEntry = await BlockedNumber.findOneAndDelete({ user: userId, phoneNumber: cleanNum });
-
     if (!deletedEntry) return res.status(404).json({ success: false, message: "Not in blocked list." });
 
     res.json({ success: true, message: "Unblocked", removed: cleanNum });

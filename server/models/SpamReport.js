@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const SpamReportSchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true, index: true },
-  reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Made required
-  tag: { type: String }, // "Scam", "Marketing"
+  reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, 
+  tag: { type: String, required: true }, // 🟢 Added required: true
   comment: { type: String },
   location: { type: String },
   createdAt: { type: Date, default: Date.now }

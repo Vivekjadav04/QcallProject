@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/transparent_bg"
+    android:background="@android:color/transparent"
     android:clickable="true"
     android:focusable="true">
 
@@ -12,256 +11,204 @@
         android:id="@+id/mainCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom" 
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_centerInParent="true" 
+        android:layout_marginHorizontal="12dp" 
         app:cardCornerRadius="16dp"
-        app:cardElevation="10dp"
+        app:cardElevation="12dp"
         app:cardBackgroundColor="@android:color/white"
-        app:cardPreventCornerOverlap="false"
-        app:cardUseCompatPadding="false">
+        app:cardPreventCornerOverlap="false">
 
-        <RelativeLayout
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-            <RelativeLayout
+            <LinearLayout
                 android:id="@+id/headerContainer"
                 android:layout_width="match_parent"
-                android:layout_height="160dp"
-                android:background="#0087FF"
-                android:paddingHorizontal="20dp"
-                android:paddingTop="20dp">
-
-                <ImageButton
-                    android:id="@+id/btnClose"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:layout_alignParentEnd="true"
-                    android:background="@drawable/ripple_circle_white"
-                    android:contentDescription="Close"
-                    android:padding="8dp"
-                    android:src="@android:drawable/ic_menu_close_clear_cancel"
-                    app:tint="#FFFFFF" />
-
-                <TextView
-                    android:id="@+id/txtTopInfo"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentStart="true"
-                    android:layout_centerVertical="true"
-                    android:letterSpacing="0.1"
-                    android:text="INCOMING CALL"
-                    android:textColor="#CCFFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/txtName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_below="@id/txtTopInfo"
-                    android:layout_marginTop="4dp"
-                    android:layout_marginEnd="60dp"
-                    android:ellipsize="end"
-                    android:maxLines="2"
-                    android:text="Searching..."
-                    android:textColor="#FFFFFF"
-                    android:textSize="28sp"
-                    android:textStyle="bold" />
-            </RelativeLayout>
-
-            <androidx.cardview.widget.CardView
-                android:id="@+id/avatarContainer"
-                android:layout_width="80dp"
-                android:layout_height="80dp"
-                android:layout_marginTop="120dp" 
-                android:layout_alignParentEnd="true"
-                android:layout_marginEnd="24dp"
-                app:cardCornerRadius="40dp"
-                app:cardElevation="6dp"
-                app:cardBackgroundColor="#FFFFFF">
+                android:layout_height="wrap_content"
+                android:background="#2196F3"
+                android:orientation="vertical"
+                android:padding="16dp">
 
                 <RelativeLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="wrap_content">
+
+                    <androidx.cardview.widget.CardView
+                        android:id="@+id/avatarContainer"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true"
+                        app:cardCornerRadius="28dp"
+                        app:cardBackgroundColor="#FFFFFF"
+                        app:cardElevation="0dp">
+
+                        <TextView
+                            android:id="@+id/txtAvatarFallback"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:text="?"
+                            android:textColor="#2196F3"
+                            android:textSize="24sp"
+                            android:textStyle="bold"/>
+
+                        <ImageView
+                            android:id="@+id/imgAvatar"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="centerCrop" />
+                    </androidx.cardview.widget.CardView>
+
+                    <ImageButton
+                        android:id="@+id/btnClose"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_alignParentTop="true"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        app:tint="#FFFFFF" />
+
+                    <LinearLayout
+                        android:id="@+id/infoRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_toEndOf="@id/avatarContainer"
+                        android:layout_toStartOf="@id/btnClose"
+                        android:layout_marginStart="12dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="#4D000000"
+                            android:paddingHorizontal="4dp"
+                            android:paddingVertical="2dp"
+                            android:text="1"
+                            android:textColor="#FFFFFF"
+                            android:textSize="10sp"
+                            android:textStyle="bold"/>
+
+                        <TextView
+                            android:id="@+id/txtTopInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:text="Incoming Call"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/nameRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_toEndOf="@id/avatarContainer"
+                        android:layout_below="@id/infoRow"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/txtName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="Searching..."
+                            android:textColor="#FFFFFF"
+                            android:textSize="22sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/premiumBadge"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_marginStart="6dp"
+                            android:src="@android:drawable/star_on"
+                            app:tint="#FFFFFF"
+                            android:visibility="gone" />
+                    </LinearLayout>
                     
                     <TextView
-                        android:id="@+id/txtAvatarFallback"
+                        android:id="@+id/txtNumber"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_toEndOf="@id/avatarContainer"
+                        android:layout_below="@id/nameRow"
+                        android:layout_marginStart="12dp"
+                        android:text="+91 00000 00000"
+                        android:textColor="#E6FFFFFF"
+                        android:textSize="12sp" />
+
+                </RelativeLayout>
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="16dp"
+                    app:cardCornerRadius="8dp"
+                    app:cardBackgroundColor="#26FFFFFF"
+                    app:cardElevation="0dp">
+                    <TextView
+                        android:id="@+id/btnViewProfile"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:gravity="center"
-                        android:text="A"
-                        android:textColor="#0087FF"
-                        android:textSize="32sp"
+                        android:text="👤 View profile"
+                        android:textColor="#FFFFFF"
                         android:textStyle="bold"
-                        android:visibility="gone"/>
+                        android:textSize="14sp"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </androidx.cardview.widget.CardView>
 
-                    <ImageView
-                        android:id="@+id/imgAvatar"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:padding="0dp"
-                        android:scaleType="centerCrop"
-                        android:src="@android:drawable/sym_def_app_icon" />
-                </RelativeLayout>
-            </androidx.cardview.widget.CardView>
+            </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/bodyContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_below="@id/headerContainer"
                 android:orientation="vertical"
-                android:paddingTop="10dp"
-                android:paddingBottom="20dp"
-                android:paddingHorizontal="24dp">
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp"
+                android:paddingHorizontal="16dp"
+                android:background="#FFFFFF">
 
-                <TextView
-                    android:id="@+id/txtNumber"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="+91 00000 00000"
-                    android:textColor="#1F2937"
-                    android:textSize="18sp"
-                    android:letterSpacing="0.05"
-                    android:textStyle="bold"/>
-
-                <TextView
-                    android:id="@+id/txtLocation"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="India • Mobile"
-                    android:textColor="#6B7280"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/btnViewProfile"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:layout_marginTop="20dp"
-                    android:background="#F3F4F6"
-                    android:gravity="center"
-                    android:text="VIEW FULL PROFILE"
-                    android:textColor="#0087FF"
-                    android:textStyle="bold"
-                    android:textSize="13sp"
-                    android:letterSpacing="0.05"
-                    android:clickable="true"
-                    android:focusable="true" />
-                
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="20dp"
-                    android:layout_marginBottom="10dp"
-                    android:background="#E5E7EB" />
-                
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:baselineAligned="false">
 
-                    <LinearLayout
-                        android:id="@+id/btnActionCall"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="10dp"
-                        android:clickable="true"
-                        android:background="?attr/selectableItemBackground">
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:src="@android:drawable/sym_action_call"
-                            app:tint="#374151" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="CALL"
-                            android:textSize="10sp"
-                            android:textColor="#374151"
-                            android:textStyle="bold"/>
+                    <LinearLayout android:id="@+id/btnActionCall" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:background="?attr/selectableItemBackground">
+                        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:src="@android:drawable/sym_action_call" app:tint="#4B5563" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="CALL" android:textSize="10sp" android:textColor="#4B5563" android:textStyle="bold"/>
                     </LinearLayout>
 
-                    <LinearLayout
-                        android:id="@+id/btnActionSpam"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="10dp"
-                        android:clickable="true"
-                        android:background="?attr/selectableItemBackground">
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@android:drawable/stat_notify_error"
-                            app:tint="#EF4444" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="SPAM"
-                            android:textSize="10sp"
-                            android:textColor="#EF4444"
-                            android:textStyle="bold"/>
+                    <LinearLayout android:id="@+id/btnActionMessage" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:background="?attr/selectableItemBackground">
+                        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:src="@android:drawable/sym_action_chat" app:tint="#4B5563" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="MESSAGE" android:textSize="10sp" android:textColor="#4B5563" android:textStyle="bold"/>
                     </LinearLayout>
 
-                    <LinearLayout
-                        android:id="@+id/btnActionSave"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="10dp"
-                        android:clickable="true"
-                        android:background="?attr/selectableItemBackground">
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:src="@android:drawable/ic_menu_add"
-                            app:tint="#374151" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="SAVE"
-                            android:textSize="10sp"
-                            android:textColor="#374151"
-                            android:textStyle="bold"/>
+                    <LinearLayout android:id="@+id/btnActionSave" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:background="?attr/selectableItemBackground">
+                        <ImageView android:id="@+id/iconActionSave" android:layout_width="22dp" android:layout_height="22dp" android:src="@android:drawable/ic_menu_add" app:tint="#4B5563" />
+                        <TextView android:id="@+id/txtActionSave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="SAVE" android:textSize="10sp" android:textColor="#4B5563" android:textStyle="bold"/>
                     </LinearLayout>
 
-                    <LinearLayout
-                        android:id="@+id/btnActionBlock"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="10dp"
-                        android:clickable="true"
-                        android:background="?attr/selectableItemBackground">
-                        <ImageView
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:src="@android:drawable/ic_delete"
-                            app:tint="#EF4444" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:text="BLOCK"
-                            android:textSize="10sp"
-                            android:textColor="#EF4444"
-                            android:textStyle="bold"/>
+                    <LinearLayout android:id="@+id/btnActionSpam" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:background="?attr/selectableItemBackground">
+                        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:src="@android:drawable/stat_notify_error" app:tint="#4B5563" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="SPAM" android:textSize="10sp" android:textColor="#4B5563" android:textStyle="bold"/>
+                    </LinearLayout>
+
+                    <LinearLayout android:id="@+id/btnActionBlock" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical" android:clickable="true" android:background="?attr/selectableItemBackground">
+                        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:src="@android:drawable/ic_delete" app:tint="#4B5563" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="BLOCK" android:textSize="10sp" android:textColor="#4B5563" android:textStyle="bold"/>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -269,20 +216,18 @@
             <FrameLayout
                 android:id="@+id/adContainer"
                 android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:layout_below="@id/bodyContainer"
-                android:background="#FAFAFA"
-                android:padding="0dp">
+                android:layout_height="40dp"
+                android:background="#F8FAFC">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:text="ADVERTISEMENT"
-                    android:textColor="#D1D5DB"
-                    android:textSize="10sp"
+                    android:textColor="#9CA3AF"
+                    android:textSize="9sp"
                     android:letterSpacing="0.2"/>
             </FrameLayout>
 
-        </RelativeLayout>
+        </LinearLayout>
     </androidx.cardview.widget.CardView>
 </RelativeLayout>

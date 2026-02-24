@@ -11,6 +11,7 @@ import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
+import android.widget.TextView // 🟢 Added this import
 import androidx.appcompat.app.AppCompatActivity
 
 class SplashActivity : AppCompatActivity() {
@@ -19,13 +20,13 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        val logo = findViewById<ImageView>(R.id.logo)
+        // 🟢 UPDATED: It is now a TextView, and the ID is logo_text
+        val logo = findViewById<TextView>(R.id.logo_text)
         val ripple1 = findViewById<ImageView>(R.id.ripple_1)
         val ripple2 = findViewById<ImageView>(R.id.ripple_2)
         val textContainer = findViewById<View>(R.id.text_container)
 
         // 1. ANIMATION: Bouncy Logo Pop-in
-        // OvershootInterpolator gives it that "spring" effect from your video
         logo.scaleX = 0f
         logo.scaleY = 0f
         logo.alpha = 0f
@@ -43,7 +44,7 @@ class SplashActivity : AppCompatActivity() {
             startRipple(ripple2, 800) // Second ripple starts later
         }, 500)
 
-        // 3. ANIMATION: Text Slide Up
+        // 3. ANIMATION: Glassmorphism Card Slide Up
         textContainer.translationY = 100f
         textContainer.animate()
             .translationY(0f).alpha(1f)

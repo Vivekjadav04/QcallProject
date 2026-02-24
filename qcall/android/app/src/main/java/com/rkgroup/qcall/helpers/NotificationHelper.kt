@@ -63,7 +63,7 @@ object NotificationHelper {
         val acceptIntent = Intent(context, CallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("call_status", "Active") 
-            putExtra("auto_answer", true)      
+            putExtra("auto_answer", true)       
             putExtra("contact_name", callerName)
             putExtra("contact_number", callerNumber)
         }
@@ -77,10 +77,10 @@ object NotificationHelper {
             context, 101, declineIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Custom Layout
-        val customLayout = RemoteViews(context.packageName, R.layout.notification_custom)
+        // 🟢 FIX: Map to your new Custom Layout
+        val customLayout = RemoteViews(context.packageName, R.layout.notification_incoming_call)
         customLayout.setTextViewText(R.id.notif_name, callerName)
-        customLayout.setTextViewText(R.id.notif_status, "Incoming Call...")
+        customLayout.setTextViewText(R.id.notif_number, callerNumber)
         
         if (photo != null) {
             customLayout.setImageViewBitmap(R.id.notif_image, photo)
@@ -104,7 +104,7 @@ object NotificationHelper {
             .setAutoCancel(false)
             .setFullScreenIntent(fullScreenPendingIntent, true)
 
-        // 🟢 FIX: Set Insistent Flag Manually (Continuous Ringing)
+        // Set Insistent Flag Manually (Continuous Ringing)
         val notification = builder.build()
         notification.flags = notification.flags or Notification.FLAG_INSISTENT
         
@@ -132,5 +132,20 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "End Call", hangupPendingIntent)
             .build()
+    }
+
+    // ==========================================
+    // 🟢 REACT NATIVE TEST HELPERS
+    // ==========================================
+    fun showTestNotification(context: Context, name: String, number: String) {
+        createNotificationChannel(context)
+        val notification = createIncomingCallNotification(context, name, number, null)
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    fun cancelTestNotification(context: Context) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(NOTIFICATION_ID)
     }
 }

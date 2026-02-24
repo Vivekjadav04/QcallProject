@@ -8,7 +8,6 @@ const UserSchema = new mongoose.Schema({
     unique: true, 
     index: true 
   },
-  // Keep password if you use it, or make it optional if using OTP only
   password: { 
     type: String, 
     required: false 
@@ -18,18 +17,16 @@ const UserSchema = new mongoose.Schema({
   firstName: { type: String, default: "" },
   lastName: { type: String, default: "" },
   email: { type: String, default: "" },
-  
-  // Renamed from 'profilePickUrl' to match new Frontend 'profilePhoto'
   profilePhoto: { type: String, default: "" }, 
 
   // --- CONTACT INFO ---
   secondPhoneNumber: { type: String, default: "" },
 
   // --- PERSONAL DETAILS ---
-  birthday: { type: String, default: "" }, // Format: DD/MM/YYYY
+  birthday: { type: String, default: "" }, 
   gender: { type: String, enum: ['Male', 'Female', 'Other', ''], default: '' },
 
-  // --- ADDRESS (Nested Object) ---
+  // --- ADDRESS ---
   address: {
     street: { type: String, default: "" },
     zipCode: { type: String, default: "" },
@@ -37,28 +34,44 @@ const UserSchema = new mongoose.Schema({
     country: { type: String, default: "India" }
   },
 
-  // --- WORK (Nested Object) ---
+  // --- WORK ---
   company: {
-    title: { type: String, default: "" },   // Job Title
-    website: { type: String, default: "" }  // Website URL
+    title: { type: String, default: "" },
+    website: { type: String, default: "" }
   },
 
   // --- ABOUT & SKILLS ---
   aboutMe: { type: String, default: "" },
-  tags: [{ type: String }], // Stores ["Developer", "Designer", etc.]
+  tags: [{ type: String }],
 
-  // --- ACCOUNT STATUS (Existing) ---
+  // --- SUBSCRIPTION & ACCOUNT STATUS ---
+  // This is the new structure to support your 24-hour sync and PHP Admin features
+  subscription: {
+    status: { 
+      type: String, 
+      lowercase: true, // 🟢 FIX: Tells DB to always make this lowercase automatically
+      enum: ['active', 'inactive', 'none', 'expired'], // 🟢 FIX: Added 'expired' so the Admin panel doesn't crash it
+      default: 'none' 
+    },
+    planName: { type: String, default: 'Free' },
+    expiresAt: { type: Date, default: null },
+    // Features like 'no_ads' or 'golden_caller_id' are stored here
+    activeFeatures: { type: [String], default: [] } 
+  },
+
   accountType: {
     type: String,
+    lowercase: true, // 🟢 FIX: Tells DB to always make this lowercase automatically
     enum: ['free', 'gold', 'platinum'],
     default: 'free'
   },
+
   settings: {
     blockSpamCalls: { type: Boolean, default: false },
     showCallerID: { type: Boolean, default: true }
   },
 
-  // --- QR CODE (Existing) ---
+  // --- QR CODE ---
   qrCodeId: {
     type: String,
     unique: true,

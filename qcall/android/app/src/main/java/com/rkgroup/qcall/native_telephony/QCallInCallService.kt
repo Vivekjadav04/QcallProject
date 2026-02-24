@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager // 🟢 IMPORTED
+import android.media.AudioManager 
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.telecom.Call
@@ -14,8 +14,10 @@ import android.telecom.VideoProfile
 import com.facebook.react.bridge.Arguments
 import com.rkgroup.qcall.CallActivity
 import com.rkgroup.qcall.CallManagerModule
-import com.rkgroup.qcall.helpers.ContactHelper // 🟢 IMPORTED
+import com.rkgroup.qcall.helpers.ContactHelper 
 import com.rkgroup.qcall.helpers.NotificationHelper
+// 🟢 IMPORT THE OVERLAY ACTIVITY
+import com.rkgroup.qcall.new_overlay.CallerIdActivity
 
 class QCallInCallService : InCallService() {
 
@@ -25,6 +27,9 @@ class QCallInCallService : InCallService() {
         var lastCallerNumber = ""
         var callStartTime: Long = 0 
         var instance: QCallInCallService? = null
+        
+        // 🟢 Track if the current call is outgoing
+        var isOutgoingCall = false 
 
         private var activeRingtone: Ringtone? = null
 
@@ -89,17 +94,16 @@ class QCallInCallService : InCallService() {
         val number = handle?.schemeSpecificPart ?: ""
         lastCallerNumber = number
 
-        // 🟢 FIX: Use ContactHelper to get Name AND Photo
         val contactInfo = ContactHelper.getContactInfo(this, number)
         lastCallerName = contactInfo.name
         
         callStartTime = 0 
+        
+        // 🟢 Check Call Direction
+        isOutgoingCall = call.details.callDirection == Call.Details.DIRECTION_OUTGOING
 
         if (call.state == Call.STATE_RINGING) {
             startRinging()
-            
-            // 🟢 FIX: Pass the Photo (contactInfo.photo) to the Notification
-            // System Notification handles VIBRATION. We handle SOUND.
             val notification = NotificationHelper.createIncomingCallNotification(this, lastCallerName, lastCallerNumber, contactInfo.photo)
             startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             updateReactAndUI(Call.STATE_RINGING)
@@ -138,11 +142,36 @@ class QCallInCallService : InCallService() {
                 }
                 Call.STATE_DISCONNECTED -> {
                     stopRingtone()
+                    
+                    // 🟢 CALCULATE DURATION
+                    val durationSeconds = if (callStartTime > 0) ((System.currentTimeMillis() - callStartTime) / 1000).toInt() else 0
                     callStartTime = 0
+                    
                     sendInternalBroadcast("ACTION_CALL_ENDED")
                     clearNotification()
+
+                    // 🟢 TRIGGER OVERLAY AFTER OUTGOING CALL
+                    if (isOutgoingCall) {
+                        launchAfterCallOverlay(lastCallerNumber, lastCallerName, durationSeconds)
+                    }
                 }
             }
+        }
+    }
+    
+    // 🟢 LAUNCH THE OVERLAY WHEN CALL ENDS
+    private fun launchAfterCallOverlay(number: String, name: String, durationInSeconds: Int) {
+        try {
+            val intent = Intent(this, CallerIdActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("number", number) 
+                putExtra("name", name)
+                putExtra("isAfterCall", true) // Flag so UI knows to say "Call Ended"
+                putExtra("duration", durationInSeconds) 
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -157,14 +186,14 @@ class QCallInCallService : InCallService() {
     }
 
     private fun startRinging() {
+        // 🟢 FIX: The Android system handles the ringtone automatically.
+        // We comment this out to stop the "Double Ringtone" bug.
+        /*
         try {
             if (activeRingtone?.isPlaying == true) return 
 
-            // 🟢 CRITICAL FIX: Respect Silent/Vibrate Mode
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             if (audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
-                // If phone is on Silent or Vibrate, DO NOT PLAY SOUND.
-                // The System Notification will handle vibration.
                 return 
             }
 
@@ -172,6 +201,7 @@ class QCallInCallService : InCallService() {
             activeRingtone = RingtoneManager.getRingtone(applicationContext, uri)
             activeRingtone?.play()
         } catch (e: Exception) { e.printStackTrace() }
+        */
     }
     
     private fun clearNotification() {

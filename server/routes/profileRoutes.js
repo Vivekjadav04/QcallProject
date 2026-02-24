@@ -28,7 +28,22 @@ router.put('/update', authMiddleware, async (req, res) => {
   try {
     // We use the ID from the token, so we can't update someone else's profile
     const userId = req.user.id;
-    const updates = req.body;
+    let updates = req.body;
+
+    // 🟢 BUG FIX: Force incoming data to lowercase to match Mongoose Enums
+    if (updates.accountType) {
+        updates.accountType = updates.accountType.toLowerCase();
+    }
+    
+    // Check if status was sent as a nested object (e.g. { subscription: { status: "Active" } })
+    if (updates.subscription && updates.subscription.status) {
+        updates.subscription.status = updates.subscription.status.toLowerCase();
+    }
+    
+    // Check if status was sent as a flat string (e.g. { "subscription.status": "Active" })
+    if (updates['subscription.status']) {
+        updates['subscription.status'] = updates['subscription.status'].toLowerCase();
+    }
 
     const updatedUser = await User.findByIdAndUpdate(
       userId, 

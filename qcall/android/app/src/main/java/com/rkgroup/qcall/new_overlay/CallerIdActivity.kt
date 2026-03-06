@@ -67,9 +67,7 @@ class CallerIdActivity : AppCompatActivity() {
     private var hasNoAds = false
     private var isAfterCall = false
     private var callDurationSeconds = 0
-    private var hasGoldenId = false
 
-    // 🟢 BUG FIX: Track the network request so we can cancel it if the overlay closes early
     private var fetchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,7 +85,6 @@ class CallerIdActivity : AppCompatActivity() {
         processIntentData(intent)
     }
 
-    // 🟢 BUG FIX: Removed the '?' to match strict Kotlin null-safety rules
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -102,7 +99,6 @@ class CallerIdActivity : AppCompatActivity() {
         val allowedFeatures = sharedPref.getStringSet("allowedFeatures", emptySet()) ?: emptySet()
         
         hasNoAds = allowedFeatures.contains("no_ads")
-        hasGoldenId = allowedFeatures.contains("golden_caller_id")
 
         if (hasNoAds) {
             adContainer.visibility = View.GONE
@@ -118,7 +114,7 @@ class CallerIdActivity : AppCompatActivity() {
         setupClickListeners(number)
         showCard()
         
-        identifyCaller(number, passedName, hasGoldenId)
+        identifyCaller(number, passedName)
     }
 
     private fun resetUI() {
@@ -181,6 +177,7 @@ class CallerIdActivity : AppCompatActivity() {
 
     private fun setupClickListeners(number: String) {
         findViewById<ImageButton>(R.id.btnClose).setOnClickListener { closeOverlay() }
+        
         btnActionCall.setOnClickListener {
             closeOverlay()
             try {
@@ -191,21 +188,22 @@ class CallerIdActivity : AppCompatActivity() {
                 Log.e(TAG, "Failed to open dialer", e)
             }
         }
-        btnViewProfile.setOnClickListener { openDeepLink("qcall://caller-id/view-profile?number=$number") }
+        
+        btnViewProfile.setOnClickListener { openDeepLink("qcall:///caller-id/view-profile?number=$number") }
         btnActionMessage.setOnClickListener { openDeepLink("sms:$number") }
-        btnActionSaveBtn.setOnClickListener { openDeepLink("qcall://caller-id/save-contact?number=$number") }
-        btnActionSpam.setOnClickListener { openDeepLink("qcall://caller-id/report-spam?number=$number") }
-        btnActionBlock.setOnClickListener { openDeepLink("qcall://caller-id/block-number?number=$number") }
+        btnActionSaveBtn.setOnClickListener { openDeepLink("qcall:///caller-id/save-contact?number=$number") }
+        btnActionSpam.setOnClickListener { openDeepLink("qcall:///caller-id/spam-report?number=$number") }
+        btnActionBlock.setOnClickListener { openDeepLink("qcall:///caller-id/block-number?number=$number") }
     }
 
-    private fun identifyCaller(number: String, passedName: String?, userHasGoldFeature: Boolean) {
-        // Cancel any previous job to avoid overlapping data if they call twice fast
+    private fun identifyCaller(number: String, passedName: String?) {
         fetchJob?.cancel() 
         
         fetchJob = CoroutineScope(Dispatchers.IO).launch {
             val rawNum = number.replace(Regex("[^0-9]"), "")
             val last10 = if (rawNum.length >= 10) rawNum.takeLast(10) else rawNum
             
+            // Fetch local contacts and server status concurrently
             val localJob = async { getLocalContactInfo(number) }
             val serverJob = async { 
                 var res = fetchFromServer("91$last10")
@@ -214,57 +212,83 @@ class CallerIdActivity : AppCompatActivity() {
             }
 
             val localContact = localJob.await()
+            val result = serverJob.await()
+            
             var currentName = passedName ?: "Unknown Caller"
             var isSavedLocally = false
+            var photoToUse: Bitmap? = null
+            var uriToUse: String? = null
 
+            // 1. Check local contacts first
             if (localContact != null) {
                 isSavedLocally = true
                 currentName = localContact.name
-                
-                if (isActive) { // Check if coroutine is still alive before updating UI
-                    withContext(Dispatchers.Main) {
-                        updateUI(currentName, localContact.photoUri, null, isSpam = false, isPremiumCaller = false, isVerifiedUser = false, isSaved = true, forceGold = userHasGoldFeature)
-                    }
-                }
+                uriToUse = localContact.photoUri
             }
 
-            val result = serverJob.await()
-
-            if (isActive) { // Safety check
-                withContext(Dispatchers.Main) {
-                    if (result != null && result.found) {
-                        val finalName = if (isSavedLocally) currentName else (result.name ?: currentName)
+            // 2. Overlay server data
+            if (result != null && result.found) {
+                // If not saved locally, take the server's name
+                if (!isSavedLocally) {
+                    currentName = result.name ?: currentName
+                }
+                
+                // 🟢 PHOTO OPTIMIZATION: If local contact has NO photo, but server DOES, use server photo!
+                if (uriToUse == null && result.bitmap != null) {
+                    photoToUse = result.bitmap
+                } else if (!isSavedLocally) {
+                    photoToUse = result.bitmap
+                }
+                
+                if (isActive) { 
+                    withContext(Dispatchers.Main) {
                         updateUI(
-                            name = finalName, 
-                            photoUri = if (isSavedLocally) localContact?.photoUri else null, 
-                            photoBitmap = result.bitmap, 
+                            name = currentName, 
+                            photoUri = uriToUse, 
+                            photoBitmap = photoToUse, 
                             isSpam = result.isSpam, 
-                            isPremiumCaller = result.isPremiumUser, 
+                            spamType = result.spamType,
+                            isPremiumCaller = result.isPremiumUser, // 🟢 Remote gold status applied
                             isVerifiedUser = result.isVerifiedUser,
-                            isSaved = isSavedLocally,
-                            forceGold = userHasGoldFeature
+                            isSaved = isSavedLocally
                         )
-                    } else if (!isSavedLocally) {
-                        updateUI(currentName, null, null, isSpam = false, isPremiumCaller = false, isVerifiedUser = false, isSaved = false, forceGold = userHasGoldFeature)
+                    }
+                }
+            } else {
+                // If no server result, just show the local contact info (Not Spam, Not Gold)
+                if (isActive) { 
+                    withContext(Dispatchers.Main) {
+                        updateUI(
+                            name = currentName, 
+                            photoUri = uriToUse, 
+                            photoBitmap = null, 
+                            isSpam = false, 
+                            spamType = null, 
+                            isPremiumCaller = false, // Not Gold
+                            isVerifiedUser = false, 
+                            isSaved = isSavedLocally
+                        )
                     }
                 }
             }
         }
     }
 
-    private fun updateUI(name: String?, photoUri: String?, photoBitmap: Bitmap?, isSpam: Boolean, isPremiumCaller: Boolean, isVerifiedUser: Boolean, isSaved: Boolean, forceGold: Boolean) {
+    private fun updateUI(name: String?, photoUri: String?, photoBitmap: Bitmap?, isSpam: Boolean, spamType: String?, isPremiumCaller: Boolean, isVerifiedUser: Boolean, isSaved: Boolean) {
         val displayName = name ?: "Unknown Caller"
         txtName.text = displayName
         premiumBadge.visibility = View.GONE
         
         val headerPrefix = if (isAfterCall) "Call ended • ${formatDuration(callDurationSeconds)}" else "QCALL • Incoming Call"
 
+        // 🟢 PRIORITY ORDER FIX (Gold is absolute top priority)
         when {
-            isSpam -> applySolidTheme(COLOR_SPAM_RED, "Likely Spam • $headerPrefix")
-            isPremiumCaller || forceGold -> {
-                applyShinyGoldTheme("👑 Premium Gold • $headerPrefix")
+            isPremiumCaller -> {
+                val spamWarn = if(isSpam) " (Spam Warning)" else ""
+                applyShinyGoldTheme("👑 Premium Gold$spamWarn • $headerPrefix")
                 premiumBadge.visibility = View.VISIBLE
             }
+            isSpam -> applySolidTheme(COLOR_SPAM_RED, "${spamType ?: "Likely Spam"} • $headerPrefix")
             isVerifiedUser -> applySolidTheme(COLOR_VERIFIED_GREEN, "Verified QCall User • $headerPrefix")
             else -> applySolidTheme(COLOR_SAFE_BLUE, if(isSaved) "Saved Contact • $headerPrefix" else headerPrefix)
         }
@@ -335,11 +359,21 @@ class CallerIdActivity : AppCompatActivity() {
                 val stream = connection.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(stream)
                 
-                if (json.optBoolean("found", false)) {
+                // 🟢 JSON PARSING FIX
+                val isFound = json.optBoolean("found", false) || json.optString("found") == "true"
+                
+                if (isFound) {
                     val name = json.optString("name", "Unknown")
-                    val isSpam = json.optBoolean("isSpam", false)
+                    val isSpam = json.optBoolean("isSpam", false) || json.optString("isSpam") == "true"
+                    val spamType = json.optString("spamType", "Likely Spam")
+                    
+                    // Bulletproof Premium Parsing
                     val isPremiumUser = json.optBoolean("isPremium", false) 
-                    val isVerifiedUser = json.optBoolean("isVerified", false)
+                        || json.optBoolean("premium", false) 
+                        || json.optString("isPremium") == "true"
+                        || json.optString("premium") == "true"
+                        
+                    val isVerifiedUser = json.optBoolean("isVerified", false) || json.optString("isVerified") == "true"
                     
                     val photoBase64 = json.optString("photo", "")
                     var apiBitmap: Bitmap? = null
@@ -349,14 +383,14 @@ class CallerIdActivity : AppCompatActivity() {
                             apiBitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
                         } catch (e: Exception) {}
                     }
-                    return ServerResult(true, name, isSpam, isPremiumUser, isVerifiedUser, apiBitmap, null)
+                    return ServerResult(true, name, isSpam, spamType, isPremiumUser, isVerifiedUser, apiBitmap, null)
                 }
             }
         } catch (e: Exception) { Log.e(TAG, "Fetch Error", e) }
-        return ServerResult(false, null, false, false, false, null, null)
+        return ServerResult(false, null, false, "Unknown", false, false, null, null)
     }
 
-    data class ServerResult(val found: Boolean, val name: String?, val isSpam: Boolean, val isPremiumUser: Boolean, val isVerifiedUser: Boolean, val bitmap: Bitmap?, val errorMessage: String?)
+    data class ServerResult(val found: Boolean, val name: String?, val isSpam: Boolean, val spamType: String, val isPremiumUser: Boolean, val isVerifiedUser: Boolean, val bitmap: Bitmap?, val errorMessage: String?)
 
     private fun getLocalContactInfo(phoneNumber: String): LocalContact? {
         if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return null
@@ -379,15 +413,22 @@ class CallerIdActivity : AppCompatActivity() {
         return if (m > 0) "${m}m ${s}s" else "${s}s"
     }
 
-    // 🟢 BUG FIX: Prevent crashes if a user's phone cannot handle the Deep Link
     private fun openDeepLink(link: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).apply {
+                setPackage(packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
             startActivity(intent)
             closeOverlay()
         } catch (e: Exception) { 
             Log.e(TAG, "Error opening link: No app found to handle $link", e) 
+            try {
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse(link))
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(fallbackIntent)
+                closeOverlay()
+            } catch (e2: Exception) {}
         }
     }
 
@@ -411,7 +452,6 @@ class CallerIdActivity : AppCompatActivity() {
         mainCard.startAnimation(anim)
     }
 
-    // 🟢 BUG FIX: Ensure background tasks are killed when the screen is destroyed
     override fun onDestroy() {
         super.onDestroy()
         fetchJob?.cancel()

@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#F2F2F7" 
+    android:orientation="vertical"
+    android:paddingBottom="20dp"
+    android:paddingTop="10dp"
+    android:paddingHorizontal="30dp">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="5dp"
+        android:background="#C6C6C8" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="70dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:id="@+id/sheetDtmfDisplay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#000000"
+            android:textSize="34sp"
+            android:textStyle="normal"
+            android:gravity="center"
+            android:lines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <LinearLayout android:id="@+id/key1" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="1" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key2" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ABC" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key3" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="3" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DEF" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+            
+            <LinearLayout android:id="@+id/key4" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="4" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="GHI" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key5" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="5" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="JKL" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key6" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="6" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MNO" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <LinearLayout android:id="@+id/key7" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="7" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PQRS" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key8" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="8" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TUV" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key9" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="9" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="WXYZ" android:textColor="#000000" android:textSize="10sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="10dp">
+
+            <LinearLayout android:id="@+id/keyStar" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="*" android:textColor="#000000" android:textSize="36sp" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/key0" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+" android:textColor="#000000" android:textSize="14sp" android:textStyle="bold" android:letterSpacing="0.1" android:includeFontPadding="false" />
+            </LinearLayout>
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+            
+            <LinearLayout android:id="@+id/keyHash" android:layout_width="68dp" android:layout_height="68dp" android:background="@drawable/bg_circle_white" android:clickable="true" android:focusable="true" android:elevation="2dp" android:gravity="center" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="#" android:textColor="#000000" android:textSize="28sp" android:includeFontPadding="false" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="5dp"
+            android:gravity="center_vertical">
+
+            <View android:layout_width="68dp" android:layout_height="68dp" />
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+
+            <ImageButton
+                android:id="@+id/btnKeypadCall"
+                android:layout_width="68dp"
+                android:layout_height="68dp"
+                android:background="@drawable/bg_circle_green" 
+                android:src="@android:drawable/ic_menu_call"
+                app:tint="#FFFFFF"
+                android:elevation="4dp"
+                android:scaleType="centerInside"
+                android:padding="16dp" />
+
+            <Space android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+
+            <ImageButton
+                android:id="@+id/btnBackspace"
+                android:layout_width="68dp"
+                android:layout_height="68dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_input_delete"
+                app:tint="#8E8E93"
+                android:padding="18dp"
+                android:scaleType="fitCenter" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

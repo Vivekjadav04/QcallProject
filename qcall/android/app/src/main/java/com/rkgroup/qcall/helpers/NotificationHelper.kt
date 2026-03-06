@@ -17,7 +17,8 @@ import com.rkgroup.qcall.native_telephony.NotificationActionReceiver
 
 object NotificationHelper {
 
-    const val CHANNEL_ID = "qcall_incoming_channel"
+    // 🟢 CHANGED: Added "_v2" to force Android to create a fresh, silent channel
+    const val CHANNEL_ID = "qcall_incoming_channel_v2"
     const val ONGOING_CHANNEL_ID = "qcall_ongoing_channel"
     const val NOTIFICATION_ID = 8888
 
@@ -26,10 +27,11 @@ object NotificationHelper {
             
             val channel = NotificationChannel(CHANNEL_ID, "Incoming Calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Notifications for incoming calls"
+                
+                // 🟢 CRITICAL FIX: Completely silent and still so QCallInCallService can take over
                 setSound(null, null) 
-                enableVibration(true)
-                // Pattern: 0ms delay, 1000ms vibrate, 500ms sleep
-                vibrationPattern = longArrayOf(0, 1000, 500, 1000) 
+                enableVibration(false)
+                
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 enableLights(true)
                 lightColor = Color.BLUE
@@ -38,6 +40,7 @@ object NotificationHelper {
             val ongoingChannel = NotificationChannel(ONGOING_CHANNEL_ID, "Ongoing Calls", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Notifications for active calls"
                 setSound(null, null)
+                enableVibration(false)
             }
 
             val manager = context.getSystemService(NotificationManager::class.java)
@@ -77,7 +80,6 @@ object NotificationHelper {
             context, 101, declineIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 🟢 FIX: Map to your new Custom Layout
         val customLayout = RemoteViews(context.packageName, R.layout.notification_incoming_call)
         customLayout.setTextViewText(R.id.notif_name, callerName)
         customLayout.setTextViewText(R.id.notif_number, callerNumber)
@@ -104,11 +106,8 @@ object NotificationHelper {
             .setAutoCancel(false)
             .setFullScreenIntent(fullScreenPendingIntent, true)
 
-        // Set Insistent Flag Manually (Continuous Ringing)
-        val notification = builder.build()
-        notification.flags = notification.flags or Notification.FLAG_INSISTENT
-        
-        return notification
+        // 🟢 REMOVED FLAG_INSISTENT: We don't want the OS looping anything anymore, our Kotlin engine handles it.
+        return builder.build()
     }
 
     fun createOngoingCallNotification(context: Context, callerName: String, callerNumber: String): Notification {

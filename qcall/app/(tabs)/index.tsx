@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   View, Text, StyleSheet, SectionList, TouchableOpacity, Platform, 
   PermissionsAndroid, Image, TextInput, NativeModules, 
-  RefreshControl, Linking, Animated, Dimensions, Easing, Modal
+  RefreshControl, Linking, Animated, Dimensions, Easing, Modal, FlatList
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; 
 import { StatusBar } from 'expo-status-bar'; 
 import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // 🟢 ADDED FOR BULLETPROOF AD CHECK
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 // @ts-ignore
 import CallLogs from 'react-native-call-log';
@@ -18,7 +18,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth'; 
 import { CallService } from '../../services/CallService'; 
 import { SyncService } from '../../services/SyncService'; 
-// 🟢 IMPORTED THE NEW FORCE SYNC
 import { checkAndSyncPremium, forceSyncPremium } from '../../services/PremiumSync'; 
 import { apiService } from '../../services/api'; 
 import DialerModal from '../../components/DialerModal'; 
@@ -39,7 +38,8 @@ const THEME = {
     dangerBg: '#FEF2F2',
     success: '#10B981',
     border: '#E2E8F0',
-    skeleton: '#E2E8F0' 
+    skeleton: '#E2E8F0',
+    qcallGreen: '#22C55E' 
   }
 };
 
@@ -88,6 +88,26 @@ const ScrollingAdBanner = () => {
       <TouchableOpacity style={styles.adCtaBtn} activeOpacity={0.8} onPress={() => Linking.openURL('https://google.com')}>
         <Text style={styles.adCtaText}>Visit Store</Text>
         <Feather name="external-link" size={12} color="#FFF" />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const InlineAdItem = () => {
+  return (
+    <View style={styles.inlineAdContainer}>
+      <View style={styles.inlineAdImageWrap}>
+        <Image source={{ uri: AD_IMAGES[0] }} style={styles.inlineAdImage} />
+      </View>
+      <View style={styles.inlineAdContent}>
+        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
+           <View style={styles.adLabelBoxMicro}><Text style={styles.adLabelTextMicro}>Ad</Text></View>
+           <Text style={styles.inlineAdTitle} numberOfLines={1}>Sponsored Content</Text>
+        </View>
+        <Text style={styles.inlineAdSub} numberOfLines={1}>Click to learn more about this offer.</Text>
+      </View>
+      <TouchableOpacity style={styles.inlineAdBtn} onPress={() => Linking.openURL('https://google.com')}>
+        <Text style={styles.inlineAdBtnText}>Visit</Text>
       </TouchableOpacity>
     </View>
   );
@@ -144,97 +164,70 @@ const SkeletonCallLog = () => {
   );
 };
 
-// --- HEADER COMPONENT ---
-const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress, onFilterPress, currentFilter, hideAds }: any) => {
-  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
-  const triggerIncomingTest = () => {
-    const testNumber = "+919924162171"; 
-    if (CallManagerModule && CallManagerModule.testIncomingOverlay) {
-      CallManagerModule.testIncomingOverlay(testNumber);
-    }
-  };
-
-  const triggerAfterCallTest = () => {
-    const testNumber = "+917908085267"; 
-    if (CallManagerModule && CallManagerModule.testAfterCallOverlay) {
-      CallManagerModule.testAfterCallOverlay(testNumber, 135); 
-    }
-  };
-
-  const triggerNotificationTest = () => {
-    if (CallManagerModule && CallManagerModule.simulateIncomingNotification) {
-      CallManagerModule.simulateIncomingNotification("Rakib SK", "+91 7908085267");
-    }
-  };
-
-  const cancelNotificationTest = () => {
-    if (CallManagerModule && CallManagerModule.cancelIncomingNotification) {
-      CallManagerModule.cancelIncomingNotification();
-    }
-  };
+const FavoriteItem = React.memo(({ item, onRowPress }: any) => {
+  const displayName = item.name || item.number || '?';
+  const avatarStyle = getAvatarStyle(displayName);
 
   return (
-    <View style={styles.headerWrapper}>
-      <View style={styles.topRow}>
-        <View>
-          <Text style={styles.headerDate}>{dateStr}</Text>
-          <Text style={styles.headerTitle}>Recents</Text>
+    <TouchableOpacity style={styles.favoriteItemContainer} activeOpacity={0.7} onPress={() => onRowPress(item)}>
+      <View style={styles.favoriteAvatarWrapper}>
+        <View style={[styles.favoriteAvatar, !item.imageUri && { backgroundColor: avatarStyle.backgroundColor }]}>
+           {item.imageUri ? (
+              <Image source={{ uri: item.imageUri }} style={styles.favoriteImage} />
+           ) : (
+              <Text style={[styles.favoriteAvatarText, { color: avatarStyle.color }]}>{displayName[0].toUpperCase()}</Text>
+           )}
         </View>
+        <View style={styles.qBadgeContainer}>
+          <Text style={styles.qBadgeText}>Q</Text>
+        </View>
+      </View>
+      <Text style={styles.favoriteName} numberOfLines={1}>{displayName}</Text>
+      <Text style={styles.favoriteNumber} numberOfLines={1}>{item.number || 'Unknown'}</Text>
+    </TouchableOpacity>
+  );
+});
+
+const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress, onFilterPress, onScannerPress }: any) => {
+  return (
+    <View style={styles.headerWrapper}>
+      <View style={styles.newHeaderRow}>
         <TouchableOpacity style={styles.profileBtn} onPress={onProfilePress} activeOpacity={0.8}>
            {userPhoto ? (
              <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
            ) : (
              <View style={styles.avatarPlaceholder}>
-                <Feather name="user" size={24} color="#FFF" />
+                <Feather name="user" size={20} color="#FFF" />
              </View>
            )}
         </TouchableOpacity>
-      </View>
-      <View style={styles.searchBlock}>
-        <Feather name="search" size={18} color={THEME.colors.textSub} />
-        <TextInput 
-          placeholder="Search logs..." 
-          placeholderTextColor={THEME.colors.textSub} 
-          style={styles.searchInput}
-          value={searchText}
-          onChangeText={setSearchText} 
-        />
-        <TouchableOpacity style={[styles.filterIcon, currentFilter !== 'All' && {backgroundColor: '#DBEAFE'}]} onPress={onFilterPress}>
-            <Feather name="filter" size={18} color={currentFilter !== 'All' ? '#2563EB' : THEME.colors.primary} />
+        <View style={styles.searchBlock}>
+          <Text style={styles.qcallLogoText}>Qcall</Text>
+          <TextInput 
+            placeholder="" 
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={setSearchText} 
+          />
+          <Feather name="search" size={20} color={THEME.colors.textMain} />
+        </View>
+        <TouchableOpacity style={styles.headerActionBtn} onPress={onScannerPress}>
+           <MaterialCommunityIcons name="qrcode-scan" size={24} color={THEME.colors.textMain} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.headerActionBtn} onPress={onFilterPress}>
+           <MaterialCommunityIcons name="dots-vertical" size={26} color={THEME.colors.textMain} />
         </TouchableOpacity>
       </View>
-
-      {/* 🟢 CONDITIONAL AD RENDER */}
-      {!hideAds && <ScrollingAdBanner />}
-
-      {/* 🟢 DEVELOPER UI TESTS (Commented out for production, kept for future testing)
-      <View style={styles.devToolsContainer}>
-        <Text style={styles.devToolsTitle}>🧪 Developer UI Tests</Text>
-        <View style={styles.devToolsRow}>
-          <TouchableOpacity style={styles.devBtnBlue} onPress={triggerIncomingTest}>
-            <Text style={styles.devBtnText}>Overlay</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.devBtnGreen} onPress={triggerAfterCallTest}>
-            <Text style={styles.devBtnText}>Call Ended</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={[styles.devToolsRow, { marginTop: 8 }]}>
-          <TouchableOpacity style={styles.devBtnPurple} onPress={triggerNotificationTest}>
-            <Text style={styles.devBtnText}>Notification</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.devBtnRed} onPress={cancelNotificationTest}>
-            <Text style={styles.devBtnText}>Dismiss</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      */}
-
     </View>
   );
 });
 
-const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress }: any) => {
+const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress, isFavorite, toggleFavorite }: any) => {
+  
+  if (item.isAd) {
+    return <InlineAdItem />;
+  }
+
   const isMissed = item.type === 'missed';
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -280,6 +273,15 @@ const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress }: any) =
               <Text style={styles.cardTime}>{item.time}</Text>
           </View>
         </View>
+        
+        <TouchableOpacity style={styles.heartBtn} onPress={() => toggleFavorite(item)}>
+            <MaterialCommunityIcons 
+               name={isFavorite ? "heart" : "heart-outline"} 
+               size={22} 
+               color={isFavorite ? THEME.colors.danger : "#CBD5E1"} 
+            />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.callBtn} onPress={() => onCallPress(item.name, item.number)}>
             <Ionicons name="call" size={20} color="#FFF" />
         </TouchableOpacity>
@@ -295,6 +297,10 @@ export default function CallLogScreen() {
   const { user } = useAuth(); 
   const { showAlert } = useCustomAlert();
   
+  const [activeTab, setActiveTab] = useState<'home' | 'favorite'>('home');
+  const [favoritesList, setFavoritesList] = useState<any[]>([]); 
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]); 
+
   const [masterLogs, setMasterLogs] = useState<any[]>([]); 
   const [contactMap, setContactMap] = useState<Map<string, any>>(new Map());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -307,17 +313,12 @@ export default function CallLogScreen() {
   const [dialerVisible, setDialerVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [permissionGranted, setPermissionGranted] = useState(false);
-
-  // 🟢 BULLETPROOF AD REMOVAL LOGIC
   const [hasNoAds, setHasNoAds] = useState(false);
 
   useEffect(() => {
     const checkPremiumStatus = async () => {
-      // 1. Check the new subscription features array
       const hasFeature = user?.subscription?.activeFeatures?.includes('no_ads');
-      // 2. Fallback: Check old legacy accountType
       const isLegacyPremium = user?.accountType === 'gold' || user?.accountType === 'platinum';
-      // 3. Fallback: Check local cache
       const cachedFeatures = await AsyncStorage.getItem('@active_features');
       const cachedHasFeature = cachedFeatures ? cachedFeatures.includes('no_ads') : false;
 
@@ -327,7 +328,6 @@ export default function CallLogScreen() {
         setHasNoAds(false);
       }
     };
-
     checkPremiumStatus();
   }, [user]);
 
@@ -336,29 +336,44 @@ export default function CallLogScreen() {
       const isAuthenticated = await apiService.isAuthenticated();
       if (isAuthenticated && user) {
         if(SyncService.startSync) SyncService.startSync();
-        // 24-hour passive check on boot
         checkAndSyncPremium(user);
       }
     };
     initSync();
   }, [user]);
 
-  const loadContacts = async () => {
+  const loadContactsAndFavorites = async () => {
     try {
         const { status } = await Contacts.requestPermissionsAsync();
         if(status === 'granted') {
             const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image] });
             const map = new Map();
-            data.forEach((c: any) => c.phoneNumbers?.forEach((p: any) => {
-              if(p.number) {
-                  const key = getLast10(p.number);
-                  map.set(key, { id: c.id, name: c.name, image: c.image?.uri });
+            const savedFavs = await AsyncStorage.getItem('@qcall_favorites');
+            const favIds = savedFavs ? JSON.parse(savedFavs) : [];
+            const favsArray: any[] = [];
+
+            data.forEach((c: any) => {
+              c.phoneNumbers?.forEach((p: any) => {
+                if(p.number) {
+                    const key = getLast10(p.number);
+                    map.set(key, { id: c.id, name: c.name, image: c.image?.uri });
+                }
+              });
+
+              if (c.name && c.phoneNumbers && c.phoneNumbers.length > 0) {
+                  if (favIds.includes(c.id) || c.isStarred) {
+                     favsArray.push({ id: c.id, name: c.name, number: c.phoneNumbers[0].number, imageUri: c.image?.uri });
+                     if(!favIds.includes(c.id)) favIds.push(c.id); 
+                  }
               }
-            }));
+            });
+
+            setFavoriteIds(favIds);
             setContactMap(map);
+            setFavoritesList(favsArray); 
             return map; 
         }
-    } catch(e) { console.log(e); }
+    } catch(e) { console.log("Contacts Error:", e); }
     return new Map(); 
   };
 
@@ -418,7 +433,7 @@ export default function CallLogScreen() {
   useFocusEffect(
     useCallback(() => {
       const init = async () => {
-        const loadedMap = await loadContacts(); 
+        const loadedMap = await loadContactsAndFavorites(); 
         if (Platform.OS === 'android') {
           const hasLogPerm = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
           if (hasLogPerm) loadData(displayLimit, loadedMap); 
@@ -434,30 +449,17 @@ export default function CallLogScreen() {
     }, [])
   );
 
-  // 🟢 FORCE SYNC ON PULL-TO-REFRESH
   const onRefresh = async () => {
     setRefreshing(true);
-    
-    if (user) {
-      // Bypasses the 24-hour limit and hits the database immediately
-      await forceSyncPremium();
-      
-      // Instantly evaluate ad removal status so the UI updates right now
-      const cachedFeatures = await AsyncStorage.getItem('@active_features');
-      const hasFeature = user?.subscription?.activeFeatures?.includes('no_ads');
-      const isLegacyPremium = user?.accountType === 'gold' || user?.accountType === 'platinum';
-      const cachedHasFeature = cachedFeatures ? cachedFeatures.includes('no_ads') : false;
-      setHasNoAds(!!(hasFeature || isLegacyPremium || cachedHasFeature));
-    }
-
+    if (user) await forceSyncPremium();
     setDisplayLimit(BATCH_SIZE); 
     setHasMoreLogs(true);
-    const loadedMap = await loadContacts(); 
+    const loadedMap = await loadContactsAndFavorites(); 
     loadData(BATCH_SIZE, loadedMap, true);
   };
 
   const onLoadMore = () => {
-    if (!isLoadingMore && hasMoreLogs && !refreshing && !searchText) {
+    if (!isLoadingMore && hasMoreLogs && !refreshing && !searchText && activeTab === 'home') {
       setIsLoadingMore(true);
       const newLimit = displayLimit + BATCH_SIZE;
       setDisplayLimit(newLimit);
@@ -471,7 +473,7 @@ export default function CallLogScreen() {
          const status = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
          if (status === PermissionsAndroid.RESULTS.GRANTED) {
            setIsInitialLoading(true);
-           const loadedMap = await loadContacts();
+           const loadedMap = await loadContactsAndFavorites();
            loadData(BATCH_SIZE, loadedMap);
          } else {
            showAlert("Permission Denied", "We cannot show your call history without permission.", "error");
@@ -518,6 +520,25 @@ export default function CallLogScreen() {
       }
   }, [router]);
 
+  const toggleFavorite = useCallback(async (item: any) => {
+      if (!item.contactId) {
+          showAlert("Contact Not Saved", "You can only favorite saved contacts.", "warning");
+          return;
+      }
+      
+      let updatedFavs = [...favoriteIds];
+      if (updatedFavs.includes(item.contactId)) {
+          updatedFavs = updatedFavs.filter(id => id !== item.contactId);
+      } else {
+          updatedFavs.push(item.contactId);
+      }
+      
+      setFavoriteIds(updatedFavs);
+      await AsyncStorage.setItem('@qcall_favorites', JSON.stringify(updatedFavs));
+      
+      loadContactsAndFavorites(); 
+  }, [favoriteIds]);
+
   const sections = useMemo(() => {
     let result = masterLogs;
     if (searchText) {
@@ -531,12 +552,21 @@ export default function CallLogScreen() {
 
     const groups: any = { 'Today': [], 'Yesterday': [] };
     const otherKeys: string[] = [];
+    
+    let adCounter = 0;
+
     result.forEach(log => {
         const label = getDayLabel(log.timestamp);
-        if(label === 'Today' || label === 'Yesterday') groups[label].push(log);
-        else {
-            if(!groups[label]) { groups[label] = []; otherKeys.push(label); }
-            groups[label].push(log);
+        if (!groups[label]) {
+            groups[label] = [];
+            if(label !== 'Today' && label !== 'Yesterday') otherKeys.push(label);
+        }
+        
+        groups[label].push(log);
+        adCounter++;
+
+        if (!hasNoAds && adCounter % 5 === 0) {
+            groups[label].push({ isAd: true, id: `ad-${log.id}` });
         }
     });
 
@@ -545,7 +575,7 @@ export default function CallLogScreen() {
         { title: 'Yesterday', data: groups['Yesterday'] },
         ...otherKeys.map(k => ({ title: k, data: groups[k] }))
     ].filter(s => s.data && s.data.length > 0);
-  }, [masterLogs, searchText, filterType, isInitialLoading]);
+  }, [masterLogs, searchText, filterType, isInitialLoading, hasNoAds]);
 
   const renderFooter = () => {
     if (!isLoadingMore) return <View style={{ height: 100 }} />;
@@ -557,11 +587,45 @@ export default function CallLogScreen() {
     );
   };
 
+  const renderTabsHeader = () => (
+    <View style={styles.tabsContainer}>
+      <TouchableOpacity 
+         style={[styles.tabButton, activeTab === 'home' && styles.activeTabButton]} 
+         onPress={() => setActiveTab('home')}
+      >
+        <MaterialCommunityIcons name="history" size={22} color={activeTab === 'home' ? '#2563EB' : THEME.colors.textSub} style={{marginRight: 6}} />
+        <Text style={[styles.tabText, activeTab === 'home' && styles.activeTabText]}>Home</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+         style={[styles.tabButton, activeTab === 'favorite' && styles.activeTabButton]} 
+         onPress={() => setActiveTab('favorite')}
+      >
+        <MaterialCommunityIcons name={activeTab === 'favorite' ? "heart" : "heart-outline"} size={22} color={activeTab === 'favorite' ? '#2563EB' : THEME.colors.textSub} style={{marginRight: 6}} />
+        <Text style={[styles.tabText, activeTab === 'favorite' && styles.activeTabText]}>Favorite</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Define Filter Options for the Bottom Sheet Modal
+  const filterOptions = [
+    { type: 'All', icon: 'phone-in-talk', color: '#3B82F6' },
+    { type: 'Missed', icon: 'phone-missed', color: THEME.colors.danger },
+    { type: 'Incoming', icon: 'phone-incoming', color: THEME.colors.success },
+    { type: 'Outgoing', icon: 'phone-outgoing', color: THEME.colors.textSub }
+  ];
+
   if (isInitialLoading && masterLogs.length === 0) {
     return (
       <View style={styles.container}>
-         <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-           <HeaderComponent searchText={searchText} setSearchText={setSearchText} userPhoto={user?.profilePhoto} hideAds={hasNoAds} />
+         <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }} edges={['top']}>
+           <HeaderComponent 
+              searchText={searchText} 
+              setSearchText={setSearchText} 
+              userPhoto={user?.profilePhoto} 
+              onScannerPress={() => router.push('/scanner')} 
+           />
+           {renderTabsHeader()}
            <View style={{ paddingHorizontal: 20 }}>
               <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Today</Text></View>
               {[1, 2, 3, 4, 5, 6].map((k) => <SkeletonCallLog key={k} />)}
@@ -574,7 +638,7 @@ export default function CallLogScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }} edges={['top']}>
         
         <HeaderComponent 
            searchText={searchText} 
@@ -582,9 +646,9 @@ export default function CallLogScreen() {
            userPhoto={user?.profilePhoto} 
            onProfilePress={() => router.push('/profile')} 
            onFilterPress={() => setShowFilterModal(true)}
-           currentFilter={filterType}
-           hideAds={hasNoAds}
+           onScannerPress={() => router.push('/scanner')} 
         />
+        {renderTabsHeader()}
         
         {!permissionGranted && !isInitialLoading && (
             <TouchableOpacity onPress={manualPermissionRequest} style={styles.permErrorBox}>
@@ -593,33 +657,53 @@ export default function CallLogScreen() {
             </TouchableOpacity>
         )}
 
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          stickySectionHeadersEnabled={false}
-          renderItem={({item, index}) => (
-            <CallLogItem 
-                item={item} 
-                index={index} 
-                onCallPress={handleNativeCall} 
-                onRowPress={handleRowPress} 
-            />
-          )}
-          renderSectionHeader={({ section: { title } }) => (
-            <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text></View>
-          )}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }} 
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.colors.primary} />}
-          onEndReached={onLoadMore}
-          onEndReachedThreshold={0.5} 
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={
-             <View style={styles.emptyState}>
-                <Feather name="phone-off" size={40} color="#CBD5E1" />
-                <Text style={styles.emptyText}>{permissionGranted ? `No ${filterType !== 'All' ? filterType.toLowerCase() : ''} calls` : "Permission needed"}</Text>
-             </View>
-          }
-        />
+        {activeTab === 'home' ? (
+           <SectionList
+             sections={sections}
+             keyExtractor={(item) => item.id}
+             stickySectionHeadersEnabled={false}
+             renderItem={({item, index}) => (
+               <CallLogItem 
+                 item={item} 
+                 index={index} 
+                 onCallPress={handleNativeCall} 
+                 onRowPress={handleRowPress} 
+                 isFavorite={favoriteIds.includes(item.contactId)} 
+                 toggleFavorite={toggleFavorite} 
+               />
+             )}
+             renderSectionHeader={({ section: { title } }) => (
+               <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text></View>
+             )}
+             ListHeaderComponent={!hasNoAds ? <ScrollingAdBanner /> : null}
+             contentContainerStyle={{ paddingBottom: insets.bottom + 100, backgroundColor: THEME.colors.bg }} 
+             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.colors.primary} />}
+             onEndReached={onLoadMore}
+             onEndReachedThreshold={0.5} 
+             ListFooterComponent={renderFooter}
+             ListEmptyComponent={
+                <View style={styles.emptyState}>
+                   <Feather name="phone-off" size={40} color="#CBD5E1" />
+                   <Text style={styles.emptyText}>{permissionGranted ? `No ${filterType !== 'All' ? filterType.toLowerCase() : ''} calls` : "Permission needed"}</Text>
+                </View>
+             }
+           />
+        ) : (
+           <FlatList 
+             data={favoritesList}
+             numColumns={4}
+             keyExtractor={(item, index) => item.id || index.toString()}
+             renderItem={({item}) => <FavoriteItem item={item} onRowPress={handleRowPress} />}
+             contentContainerStyle={{ padding: 16, paddingTop: 24, paddingBottom: insets.bottom + 100, backgroundColor: THEME.colors.bg, flexGrow: 1 }}
+             columnWrapperStyle={{ justifyContent: 'flex-start', gap: '3%', marginBottom: 24 }}
+             ListEmptyComponent={
+               <View style={{alignItems: 'center', marginTop: 50}}>
+                 <MaterialCommunityIcons name="heart-outline" size={48} color={THEME.colors.skeleton} />
+                 <Text style={{textAlign:'center', marginTop: 10, color: THEME.colors.textSub, fontWeight: '600'}}>No favorites yet</Text>
+               </View>
+             }
+           />
+        )}
 
         <TouchableOpacity 
           style={[styles.fab, { bottom: insets.bottom + 190, backgroundColor: '#3B82F6' }]} 
@@ -643,20 +727,52 @@ export default function CallLogScreen() {
 
         <DialerModal visible={dialerVisible} onClose={() => setDialerVisible(false)} masterLogs={masterLogs} onCallPress={handleNativeCall} />
         
-        <Modal transparent visible={showFilterModal} animationType="fade" onRequestClose={() => setShowFilterModal(false)}>
-            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
-                <View style={styles.filterModal}>
-                    <Text style={styles.filterTitle}>Filter Calls</Text>
-                    {['All', 'Missed', 'Incoming', 'Outgoing'].map((type) => (
-                        <TouchableOpacity 
-                            key={type} 
-                            style={[styles.filterOption, filterType === type && styles.filterOptionActive]}
-                            onPress={() => { setFilterType(type as any); setShowFilterModal(false); }}
-                        >
-                            <Text style={[styles.filterText, filterType === type && styles.filterTextActive]}>{type} Calls</Text>
-                            {filterType === type && <Feather name="check" size={18} color="#FFF" />}
-                        </TouchableOpacity>
-                    ))}
+        {/* 🟢 BEAUTIFUL BOTTOM SHEET FILTER MENU */}
+        <Modal transparent visible={showFilterModal} animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
+            <TouchableOpacity style={styles.modalOverlayBottomSheet} activeOpacity={1} onPress={() => setShowFilterModal(false)}>
+                <View style={styles.bottomSheetModal}>
+                    <View style={styles.sheetHandle} />
+                    <Text style={styles.sheetTitle}>Filter & Settings</Text>
+                    
+                    <View style={styles.filterOptionsContainer}>
+                      {filterOptions.map((item) => (
+                          <TouchableOpacity 
+                              key={item.type} 
+                              style={[styles.sheetOptionBtn, filterType === item.type && styles.sheetOptionBtnActive]}
+                              onPress={() => { setFilterType(item.type as any); setShowFilterModal(false); }}
+                          >
+                              <View style={[styles.sheetIconBox, { backgroundColor: filterType === item.type ? item.color : '#F8FAFC' }]}>
+                                <MaterialCommunityIcons 
+                                  name={item.icon as any} 
+                                  size={22} 
+                                  color={filterType === item.type ? '#FFF' : item.color} 
+                                />
+                              </View>
+                              <Text style={[styles.sheetOptionText, filterType === item.type && styles.sheetOptionTextActive]}>
+                                {item.type} Calls
+                              </Text>
+                              {filterType === item.type && <Feather name="check" size={20} color={item.color} style={{marginLeft: 'auto'}} />}
+                          </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={styles.sheetDivider} />
+
+                    {/* Settings Button */}
+                    <TouchableOpacity 
+                        style={styles.sheetOptionBtn}
+                        onPress={() => { 
+                          setShowFilterModal(false); 
+                          router.push('/settings'); 
+                        }}
+                    >
+                        <View style={[styles.sheetIconBox, { backgroundColor: '#F8FAFC' }]}>
+                          <Feather name="settings" size={22} color={THEME.colors.textSub} />
+                        </View>
+                        <Text style={styles.sheetOptionText}>App Settings</Text>
+                        <Feather name="chevron-right" size={20} color="#CBD5E1" style={{marginLeft: 'auto'}} />
+                    </TouchableOpacity>
+
                 </View>
             </TouchableOpacity>
         </Modal>
@@ -668,41 +784,29 @@ export default function CallLogScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.colors.bg },
-  headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  headerDate: { fontSize: 13, color: THEME.colors.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  headerTitle: { fontSize: 34, fontWeight: '900', color: THEME.colors.primary, letterSpacing: -1 },
+  
+  headerWrapper: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
+  newHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  
   profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
-  avatarImage: { width: 48, height: 48, borderRadius: 18, borderWidth: 2, borderColor: '#FFF' },
-  avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  avatarImage: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: '#FFF' },
+  avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   
-  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: THEME.colors.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
-  filterIcon: { padding: 8, borderRadius: 12 },
+  searchBlock: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', marginHorizontal: 12, height: 46, borderRadius: 23, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.colors.border },
+  qcallLogoText: { fontSize: 18, fontWeight: '900', color: THEME.colors.primary, fontStyle: 'italic', marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 16, color: THEME.colors.textMain },
   
-  devToolsContainer: { marginTop: 16, backgroundColor: '#F1F5F9', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
-  devToolsTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
-  devToolsRow: { flexDirection: 'row', gap: 10 },
-  devBtnBlue: { flex: 1, backgroundColor: '#3B82F6', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  devBtnGreen: { flex: 1, backgroundColor: '#10B981', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  devBtnPurple: { flex: 1, backgroundColor: '#8B5CF6', paddingVertical: 10, borderRadius: 10, alignItems: 'center' }, 
-  devBtnRed: { flex: 1, backgroundColor: '#EF4444', paddingVertical: 10, borderRadius: 10, alignItems: 'center' }, 
-  devBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+  headerActionBtn: { padding: 6, marginLeft: 2 },
 
-  adBannerWrapper: { backgroundColor: '#FFF', marginTop: 20, borderRadius: 20, padding: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  adHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  adLabelBox: { backgroundColor: '#FBBF24', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  adLabelText: { fontSize: 10, fontWeight: '900', color: '#92400E' },
-  adBrandText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  adClipContainer: { overflow: 'hidden', height: 80, borderRadius: 12, backgroundColor: '#F8FAFC' },
-  adScrollRow: { flexDirection: 'row' },
-  adImageWrapper: { height: 80, marginRight: 10, borderRadius: 10, overflow: 'hidden' },
-  adImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  adCtaBtn: { marginTop: 10, backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 10, gap: 6 },
-  adCtaText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
-
-  sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
+  tabsContainer: { flexDirection: 'row', backgroundColor: THEME.colors.bg, borderBottomWidth: 1, borderBottomColor: THEME.colors.border, paddingHorizontal: 16 },
+  tabButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  activeTabButton: { borderBottomColor: '#2563EB' },
+  tabText: { fontSize: 16, fontWeight: '600', color: THEME.colors.textSub },
+  activeTabText: { color: '#2563EB', fontWeight: '800' },
+  
+  sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, backgroundColor: THEME.colors.bg },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },
+  
   cardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 20, marginBottom: 8, padding: 14, borderRadius: 18, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#F1F5F9' },
   squircleAvatar: { width: 46, height: 46, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   missedAvatarBg: { backgroundColor: THEME.colors.dangerBg },
@@ -719,18 +823,61 @@ const styles = StyleSheet.create({
   dotSeparator: { marginHorizontal: 6, color: '#CBD5E1', fontSize: 10 },
   cardTime: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
   callBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 10, shadowColor: THEME.colors.primary, shadowOpacity: 0.3, shadowRadius: 8 },
+  
+  heartBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
+
+  inlineAdContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', marginHorizontal: 20, marginBottom: 8, padding: 10, borderRadius: 18, borderWidth: 1, borderColor: '#FEF3C7', elevation: 1 },
+  inlineAdImageWrap: { width: 46, height: 46, borderRadius: 12, overflow: 'hidden', marginRight: 14 },
+  inlineAdImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  inlineAdContent: { flex: 1 },
+  adLabelBoxMicro: { backgroundColor: '#F59E0B', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, marginRight: 6 },
+  adLabelTextMicro: { fontSize: 9, fontWeight: '900', color: '#FFF' },
+  inlineAdTitle: { fontSize: 15, fontWeight: '700', color: '#92400E', flex: 1 },
+  inlineAdSub: { fontSize: 12, color: '#B45309', marginTop: 2 },
+  inlineAdBtn: { backgroundColor: '#F59E0B', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
+  inlineAdBtnText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
+
+  favoriteItemContainer: { width: '22%', alignItems: 'center' },
+  favoriteAvatarWrapper: { position: 'relative', marginBottom: 8 },
+  favoriteAvatar: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 6, backgroundColor: '#E2E8F0', borderWidth: 2, borderColor: '#FFF' },
+  favoriteImage: { width: '100%', height: '100%', borderRadius: 35 },
+  favoriteAvatarText: { fontSize: 24, fontWeight: '800' },
+  qBadgeContainer: { position: 'absolute', top: -2, left: -2, backgroundColor: THEME.colors.qcallGreen, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF', elevation: 5 },
+  qBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '900' },
+  favoriteName: { fontSize: 13, fontWeight: '800', color: THEME.colors.textMain, textAlign: 'center' },
+  favoriteNumber: { fontSize: 10, color: THEME.colors.textSub, textAlign: 'center', marginTop: 2, fontWeight: '500' },
+
   fab: { position: 'absolute', right: 20, shadowColor: THEME.colors.primary, shadowOpacity: 0.5, shadowRadius: 16, elevation: 10, borderRadius: 30 },
   fabGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
   fabContent: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: '#3B82F6' },
-  permErrorBox: { marginHorizontal: 20, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FECACA' },
+  
+  permErrorBox: { marginHorizontal: 20, padding: 12, backgroundColor: '#FEF2F2', borderRadius: 12, marginBottom: 10, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FECACA' },
   permErrorText: { color: '#DC2626', fontWeight: '600', fontSize: 13, marginLeft: 8 },
   emptyState: { alignItems: 'center', marginTop: 60, opacity: 0.7 },
   emptyText: { color: '#94A3B8', fontSize: 16, marginTop: 10, fontWeight: '500' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  filterModal: { backgroundColor: '#FFF', width: '80%', borderRadius: 20, padding: 20, elevation: 10 },
-  filterTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: THEME.colors.primary },
-  filterOption: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12 },
-  filterOptionActive: { backgroundColor: THEME.colors.primary },
-  filterText: { fontSize: 16, color: THEME.colors.textMain, fontWeight: '500' },
-  filterTextActive: { color: '#FFF', fontWeight: '700' }
+
+  // 🟢 NEW BEAUTIFUL BOTTOM SHEET MODAL STYLES
+  modalOverlayBottomSheet: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  bottomSheetModal: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 40 },
+  sheetHandle: { width: 40, height: 4, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20, borderRadius: 2 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: THEME.colors.primary, marginBottom: 20, paddingHorizontal: 10 },
+  filterOptionsContainer: { gap: 8 },
+  sheetOptionBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderRadius: 16, backgroundColor: '#FFF' },
+  sheetOptionBtnActive: { backgroundColor: '#F8FAFC' },
+  sheetIconBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  sheetOptionText: { fontSize: 16, color: THEME.colors.textMain, fontWeight: '600' },
+  sheetOptionTextActive: { fontWeight: '800' },
+  sheetDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 15, marginHorizontal: 10 },
+
+  adBannerWrapper: { backgroundColor: '#FFF', marginHorizontal: 20, marginTop: 20, borderRadius: 20, padding: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  adHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  adLabelBox: { backgroundColor: '#FBBF24', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  adLabelText: { fontSize: 10, fontWeight: '900', color: '#92400E' },
+  adBrandText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  adClipContainer: { overflow: 'hidden', height: 80, borderRadius: 12, backgroundColor: '#F8FAFC' },
+  adScrollRow: { flexDirection: 'row' },
+  adImageWrapper: { height: 80, marginRight: 10, borderRadius: 10, overflow: 'hidden' },
+  adImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  adCtaBtn: { marginTop: 10, backgroundColor: '#3B82F6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 10, gap: 6 },
+  adCtaText: { color: '#FFF', fontWeight: '800', fontSize: 12 }, 
 });

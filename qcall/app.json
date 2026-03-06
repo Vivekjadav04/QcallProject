@@ -47,6 +47,12 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Qcall to access your camera to scan contact QR codes."
+        }
       ]
     ],
     "experiments": {

@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { API_BASE_URL } from '../../constants/config';
 
-// 🟢 Secure Ops Context (API calls only, no direct DB interaction)
+// 🟢 Secure Ops Context
 import { useSecureOps } from '../../context/SecureOperationsContext';
 
 const { width } = Dimensions.get('window');
@@ -19,7 +19,7 @@ const THEME = {
   card: '#FFFFFF',       
   primary: '#3B82F6',
   danger: '#EF4444',
-  warning: '#F59E0B',    // Amber/Yellow for moderate risk
+  warning: '#F59E0B',    
   success: '#10B981',
   text: '#0F172A',       
   subText: '#64748B',    
@@ -35,7 +35,6 @@ export default function ViewCallerProfileScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [spamScore, setSpamScore] = useState(0);
 
-  // 🟢 CUSTOM POPUP STATE
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupConfig, setPopupConfig] = useState({ type: 'info', title: '', message: '' });
 
@@ -72,21 +71,33 @@ export default function ViewCallerProfileScreen() {
     const cleanNumber = Array.isArray(number) ? number[0] : number;
 
     switch (action) {
-      case 'call': Linking.openURL(`tel:${cleanNumber}`); break;
-      case 'message':
-        try {
-          const smsUrl = `sms:${cleanNumber}`;
-          if (await Linking.canOpenURL(smsUrl)) await Linking.openURL(smsUrl);
-          else showCustomPopup('error', 'Error', 'Default messaging app not found.');
-        } catch (error) {}
+      case 'call': 
+        Linking.openURL(`tel:${cleanNumber}`); 
         break;
-      case 'whatsapp': Linking.openURL(`whatsapp://send?phone=${cleanNumber.replace(/[^\d]/g, '')}`); break;
-      case 'block': router.push({ pathname: '/caller-id/block-number', params: { number: cleanNumber } }); break;
-      case 'report': router.push({ pathname: '/caller-id/spam-report', params: { number: cleanNumber } }); break;
+      case 'message':
+        // 🟢 FIXED: Push to custom ChatScreen instead of leaving the app
+        router.push({
+          pathname: '/messages/chat',
+          params: {
+            senderId: cleanNumber,
+            senderName: profile?.name || "Unknown Caller",
+            isBank: (spamScore > 40 && spamScore < 80) ? 'true' : 'false', // Optional heuristic
+            avatar: profile?.photo || ''
+          }
+        });
+        break;
+      case 'whatsapp': 
+        Linking.openURL(`whatsapp://send?phone=${cleanNumber.replace(/[^\d]/g, '')}`); 
+        break;
+      case 'block': 
+        router.push({ pathname: '/caller-id/block-number', params: { number: cleanNumber } }); 
+        break;
+      case 'report': 
+        router.push({ pathname: '/caller-id/spam-report', params: { number: cleanNumber } }); 
+        break;
     }
   };
 
-  // 🟢 BEAUTIFUL POPUP TRIGGER
   const showCustomPopup = (type: 'confirm' | 'success' | 'error' | 'info', title: string, message: string) => {
     setPopupConfig({ type, title, message });
     setPopupVisible(true);
@@ -98,21 +109,18 @@ export default function ViewCallerProfileScreen() {
   };
 
   const executeMarkAsSafe = async () => {
-    setPopupVisible(false); // Hide confirm popup
+    setPopupVisible(false); 
     const cleanNumber = Array.isArray(number) ? number[0] : number;
     
-    // Call our Node API via Context
     const success = await markAsSafe(cleanNumber);
     
     setTimeout(() => {
         if (success) {
-            // Drop the spam score, which dynamically raises the Trust Score!
             setSpamScore((prev) => Math.max(0, prev - 20)); 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             showCustomPopup('success', 'Thank You!', 'You have successfully helped improve the QCall directory.');
         } else {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            // Beautiful error handling instead of raw code crashes
             showCustomPopup('error', 'Service Unavailable', 'Our servers are taking a short break. Please try marking this safe again later!');
         }
     }, 400);
@@ -126,7 +134,6 @@ export default function ViewCallerProfileScreen() {
     );
   }
 
-  // 🟢 DYNAMIC TRUST SCORE LOGIC (0% to 100%)
   const trustScore = 100 - spamScore; 
   let scoreColor = THEME.success;
   let scoreText = 'SAFE';
@@ -148,7 +155,7 @@ export default function ViewCallerProfileScreen() {
       tagIcon = 'alert-circle';
   }
 
-  const isVerified = profile?.isRegisteredUser; 
+  const isVerified = profile?.isRegisteredUser || profile?.isVerified; 
 
   return (
     <View style={styles.container}>
@@ -198,7 +205,6 @@ export default function ViewCallerProfileScreen() {
           </View>
         </View>
 
-        {/* 🟢 DYNAMIC REPUTATION CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Trust Score</Text>
@@ -214,14 +220,12 @@ export default function ViewCallerProfileScreen() {
             />
           </View>
           
-          {/* ALWAYS VISIBLE TRUST BUTTON */}
           <TouchableOpacity style={styles.safeBtn} onPress={handleMarkAsSafeClick}>
              <Feather name="thumbs-up" size={18} color={THEME.success} />
              <Text style={styles.safeBtnText}>I trust this number (Not Spam)</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Action Grid */}
         <View style={styles.gridContainer}>
           <TouchableOpacity style={styles.gridItem} onPress={() => handleAction('call')}>
             <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
@@ -259,7 +263,6 @@ export default function ViewCallerProfileScreen() {
 
       </ScrollView>
 
-      {/* 🟢 BEAUTIFUL CUSTOM MODAL */}
       <Modal transparent visible={popupVisible} animationType="fade">
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -332,7 +335,6 @@ const styles = StyleSheet.create({
   reportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 15, marginHorizontal: 40, borderTopWidth: 1, borderColor: THEME.border },
   reportText: { color: THEME.subText, fontWeight: '600' },
 
-  // 🟢 MODAL STYLES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#FFF', width: '100%', borderRadius: 24, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 },
   modalIconBox: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },

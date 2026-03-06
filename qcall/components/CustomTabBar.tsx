@@ -4,15 +4,20 @@ import { BlurView } from 'expo-blur';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { THEME } from '../constants/theme'; // 🟢 FIXED: Lowercase 'theme'
+import { THEME } from '../constants/theme'; 
 
 export default function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets();
 
+  // 🟢 DYNAMIC BOTTOM POSITIONING
+  // If insets.bottom > 0 (Navigation soft-keys or iOS indicator are present): float 10px above them.
+  // If insets.bottom === 0 (Gesture navigation, keys are hidden): sit 20px from the bottom edge.
+  const dynamicBottom = insets.bottom > 0 ? insets.bottom + 10 : 20;
+
   return (
     <View style={[
       styles.container, 
-      { bottom: Platform.OS === 'ios' ? insets.bottom + 10 : 25 } 
+      { bottom: dynamicBottom } // 🟢 Applied dynamic positioning here
     ]}>
       <BlurView intensity={90} tint="light" style={styles.blurContainer}>
         <View style={styles.tabRow}>

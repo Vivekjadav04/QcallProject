@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
@@ -51,32 +51,44 @@ const STEPS = [
 // Duplicate data to create seamless loop
 const MARQUEE_DATA = [...STEPS, ...STEPS, ...STEPS]; 
 
-// --- HEADER ---
+// 🟢 UNIFIED HEADER COMPONENT
 const HeaderComponent = ({ router, userPhoto }: any) => (
   <View style={styles.headerWrapper}>
-    <View style={styles.topRow}>
-        <View>
-            <Text style={styles.headerDate}>AI PROTECTION</Text>
-            <Text style={styles.headerTitle}>Assistant</Text>
-        </View>
-        <TouchableOpacity style={styles.profileBtn} onPress={() => router.push('/profile')} activeOpacity={0.8}>
-            {userPhoto ? (
-                <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
-            ) : (
-                <View style={styles.avatarPlaceholder}>
-                    <Ionicons name="person" size={24} color="#FFF" />
-                </View>
-            )}
-        </TouchableOpacity>
-    </View>
-    <View style={styles.searchBlock}>
-        <Ionicons name="sparkles" size={18} color={THEME.accent} />
+    <View style={styles.newHeaderRow}>
+      
+      {/* 1. Profile Icon (Left) */}
+      <TouchableOpacity style={styles.profileBtn} onPress={() => router.push('/profile')} activeOpacity={0.8}>
+         {userPhoto ? (
+           <Image source={{ uri: userPhoto }} style={styles.avatarImage} />
+         ) : (
+           <View style={styles.avatarPlaceholder}>
+              <Feather name="user" size={20} color="#FFF" />
+           </View>
+         )}
+      </TouchableOpacity>
+
+      {/* 2. Center Search Bar (Qcall text + AI input + sparkle icon) */}
+      <View style={styles.searchBlock}>
+        <Text style={styles.qcallLogoText}>Qcall</Text>
         <TextInput 
-            placeholder="Ask QCall Assistant..." 
-            placeholderTextColor={THEME.textSub} 
-            style={styles.searchInput}
-            editable={false} 
+          placeholder="Ask Assistant..." 
+          placeholderTextColor={THEME.textSub}
+          style={styles.searchInput}
+          editable={false} 
         />
+        <Ionicons name="sparkles" size={20} color={THEME.accent} />
+      </View>
+
+      {/* 3. Scanner Icon */}
+      <TouchableOpacity style={styles.headerActionBtn} onPress={() => { console.log("Scanner Will Open Here") }}>
+         <MaterialCommunityIcons name="qrcode-scan" size={24} color={THEME.textMain} />
+      </TouchableOpacity>
+
+      {/* 4. Three Dots */}
+      <TouchableOpacity style={styles.headerActionBtn} onPress={() => {}}>
+         <MaterialCommunityIcons name="dots-vertical" size={26} color={THEME.textMain} />
+      </TouchableOpacity>
+
     </View>
   </View>
 );
@@ -324,16 +336,16 @@ const FeatureItem = ({text, icon}: {text: string, icon: any}) => (
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: THEME.bg },
   
-  // Header
-  headerWrapper: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.bg },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  headerDate: { fontSize: 13, color: THEME.textSub, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  headerTitle: { fontSize: 34, fontWeight: '900', color: THEME.primary, letterSpacing: -1 },
+  // 🟢 UNIFIED HEADER STYLES
+  headerWrapper: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.bg },
+  newHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
-  avatarImage: { width: 48, height: 48, borderRadius: 18, borderWidth: 2, borderColor: '#FFF' },
-  avatarPlaceholder: { width: 48, height: 48, borderRadius: 18, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
-  searchBlock: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 16, height: 52, borderRadius: 20, borderWidth: 1, borderColor: THEME.border, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  searchInput: { flex: 1, marginLeft: 12, fontSize: 16, color: THEME.textMain, fontWeight: '500' },
+  avatarImage: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: '#E2E8F0' },
+  avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: THEME.primary, justifyContent: 'center', alignItems: 'center' },
+  searchBlock: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', marginHorizontal: 12, height: 46, borderRadius: 23, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.border },
+  qcallLogoText: { fontSize: 18, fontWeight: '900', color: THEME.primary, fontStyle: 'italic', marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 14, color: THEME.textMain },
+  headerActionBtn: { padding: 6, marginLeft: 2 },
 
   content: { paddingHorizontal: 24, alignItems: 'center' },
   

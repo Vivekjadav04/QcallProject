@@ -5,24 +5,180 @@
     android:id="@+id/rootLayout" 
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0F172A"
-    tools:context=".CallActivity">
+    android:background="#000000">
+
+    <ImageView
+        android:id="@+id/bgBlurredImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@android:drawable/sym_def_app_icon" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#B3000000" />
+
+    <RelativeLayout
+        android:id="@+id/incomingRLView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="90dp"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/incomingTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Incoming Call"
+                android:textColor="#99FFFFFF"
+                android:letterSpacing="0.15"
+                android:textSize="14sp"
+                android:textAllCaps="true"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/incomingCallerName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginHorizontal="24dp"
+                android:text="Loading..."
+                android:textAlignment="center"
+                android:textColor="@color/white"
+                android:textSize="36sp"
+                android:textStyle="bold"
+                android:maxLines="2"
+                android:ellipsize="end"/>
+
+            <TextView
+                android:id="@+id/incomingNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="+1 000 000 000"
+                android:textColor="#CCFFFFFF"
+                android:textSize="18sp"
+                android:letterSpacing="0.05"/>
+
+            <TextView
+                android:id="@+id/incomingLocation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Mobile"
+                android:textColor="#80FFFFFF"
+                android:textSize="14sp"/>
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/incomingProfileContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true">
+            <ImageView
+                android:id="@+id/incomingProfilePic"
+                android:layout_width="140dp"
+                android:layout_height="140dp"
+                android:src="@android:drawable/sym_def_app_icon"
+                android:background="@drawable/bg_glass_circle"
+                android:padding="2dp"
+                android:clipToOutline="true"
+                app:tint="@color/white" />
+        </FrameLayout>
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/swipeTrack"
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:layout_alignParentBottom="true"
+            android:layout_marginBottom="60dp"
+            android:layout_marginHorizontal="30dp"
+            app:cardCornerRadius="40dp"
+            app:cardBackgroundColor="#1AFFFFFF"
+            app:cardElevation="0dp">
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/swipeHintText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerInParent="true"
+                    android:text="Swipe to answer"
+                    android:textColor="#80FFFFFF"
+                    android:textSize="15sp"
+                    android:letterSpacing="0.05"
+                    android:textStyle="bold"/>
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_alignParentStart="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginStart="24dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    app:tint="#FFFFFF"
+                    android:alpha="0.4"/>
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginEnd="24dp"
+                    android:src="@android:drawable/ic_menu_call"
+                    app:tint="#FFFFFF"
+                    android:alpha="0.4"/>
+
+                <View
+                    android:id="@+id/swipeColorCircle"
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:layout_centerInParent="true"
+                    android:background="@drawable/bg_glass_round" 
+                    android:alpha="0"
+                    android:scaleX="1"
+                    android:scaleY="1"/>
+
+                <ImageView
+                    android:id="@+id/btnSwipeThumb"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_centerInParent="true"
+                    android:background="@drawable/circle_bg_white"
+                    android:src="@android:drawable/ic_menu_call"
+                    android:padding="22dp"
+                    android:elevation="6dp"
+                    app:tint="#0F172A" />
+            </RelativeLayout>
+        </androidx.cardview.widget.CardView>
+    </RelativeLayout>
 
     <RelativeLayout
         android:id="@+id/inProgressCallRLView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone"
-        android:paddingTop="40dp">
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/ongoingTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerHorizontal="true"
+            android:layout_marginTop="60dp"
             android:text="QCall"
-            android:textColor="@color/white"
-            android:textSize="20sp"
+            android:textColor="#B3FFFFFF"
+            android:textSize="16sp"
+            android:letterSpacing="0.1"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -30,300 +186,134 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_below="@id/ongoingTitle"
-            android:layout_marginTop="20dp"
-            android:orientation="vertical"
-            android:gravity="center">
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/ongoingStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Call in Progress"
-                android:textColor="#E0E0E0"
-                android:textSize="16sp" />
+                android:text="Call Active"
+                android:textColor="#80FFFFFF"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/ongoingDuration"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
                 android:text="00:00"
-                android:textColor="#10B981"
-                android:textSize="22sp"
-                android:textStyle="bold" />
+                android:textColor="#FFFFFF"
+                android:textSize="26sp"
+                android:fontFamily="sans-serif-medium" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/ongoingProfilePic"
-            android:layout_width="140dp"
-            android:layout_height="140dp"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
             android:layout_below="@id/ongoingInfoContainer"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="40dp"
+            android:layout_marginTop="30dp"
             android:src="@android:drawable/sym_def_app_icon"
-            android:background="@drawable/bg_glass_card"
+            android:background="@drawable/bg_glass_circle"
             android:padding="2dp"
             android:clipToOutline="true"
             app:tint="@color/white" />
 
         <TextView
             android:id="@+id/ongoingCallerName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/ongoingProfilePic"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="20dp"
-            android:text="Unknown Caller"
-            android:textColor="@color/white"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/ongoingCallerNumber"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/ongoingCallerName"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="8dp"
-            android:text="+1 000 000 000"
-            android:textColor="#E0E0E0"
-            android:textSize="18sp" />
-
-        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_marginBottom="140dp"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:weightSum="3">
+            android:layout_below="@id/ongoingProfilePic"
+            android:layout_marginTop="16dp"
+            android:layout_marginHorizontal="20dp"
+            android:text="Unknown Caller"
+            android:textAlignment="center"
+            android:textColor="@color/white"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"/>
+        
+        <TextView
+            android:id="@+id/ongoingCallerNumber"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/ongoingCallerName"
+            android:layout_marginTop="4dp"
+            android:text="+1 000 000 000"
+            android:textAlignment="center"
+            android:textColor="#B3FFFFFF"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            android:id="@+id/controlsGrid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/btnEndCall"
+            android:layout_marginBottom="40dp"
+            android:orientation="vertical"
+            android:paddingHorizontal="30dp">
 
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-                <ImageView
-                    android:id="@+id/btnMute"
-                    android:layout_width="60dp"
-                    android:layout_height="60dp"
-                    android:background="@drawable/bg_glass_card"
-                    android:padding="15dp"
-                    android:src="@android:drawable/ic_lock_silent_mode_off"
-                    app:tint="@color/white" />
-                <TextView
-                    android:id="@+id/txtMute"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Mute"
-                    android:textColor="@color/white"
-                    android:layout_marginTop="8dp"
-                    android:textSize="14sp" />
+                android:orientation="horizontal"
+                android:weightSum="3"
+                android:layout_marginBottom="24dp">
+                
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <ImageView android:id="@+id/btnMute" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_glass_circle" android:padding="18dp" android:src="@android:drawable/ic_btn_speak_now" app:tint="@color/white" />
+                    <TextView android:id="@+id/txtMute" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Mute" android:textColor="@color/white" android:layout_marginTop="8dp" android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <ImageView android:id="@+id/btnKeypadToggle" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_glass_circle" android:padding="18dp" android:src="@android:drawable/ic_dialog_dialer" app:tint="@color/white" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Keypad" android:textColor="@color/white" android:layout_marginTop="8dp" android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <ImageView android:id="@+id/btnAudioRoute" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_glass_circle" android:padding="18dp" android:src="@android:drawable/stat_sys_speakerphone" app:tint="@color/white" />
+                    <TextView android:id="@+id/txtAudioRoute" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Audio" android:textColor="@color/white" android:layout_marginTop="8dp" android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-                <ImageView
-                    android:id="@+id/btnKeypad"
-                    android:layout_width="60dp"
-                    android:layout_height="60dp"
-                    android:background="@drawable/bg_glass_card"
-                    android:padding="15dp"
-                    android:src="@android:drawable/ic_menu_sort_by_size"
-                    app:tint="@color/white" />
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Keypad"
-                    android:textColor="@color/white"
-                    android:layout_marginTop="8dp"
-                    android:textSize="14sp" />
-            </LinearLayout>
+                android:orientation="horizontal"
+                android:weightSum="3">
+                
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <ImageView android:id="@+id/btnAddCall" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_glass_circle" android:padding="18dp" android:src="@android:drawable/ic_menu_add" app:tint="@color/white" />
+                    <TextView android:id="@+id/txtAddCall" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Add Call" android:textColor="@color/white" android:layout_marginTop="8dp" android:textSize="12sp" />
+                </LinearLayout>
 
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-                <ImageView
-                    android:id="@+id/btnSpeaker"
-                    android:layout_width="60dp"
-                    android:layout_height="60dp"
-                    android:background="@drawable/bg_glass_card"
-                    android:padding="15dp"
-                    android:src="@android:drawable/ic_lock_silent_mode"
-                    app:tint="@color/white" />
-                <TextView
-                    android:id="@+id/txtSpeaker"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Speaker"
-                    android:textColor="@color/white"
-                    android:layout_marginTop="8dp"
-                    android:textSize="14sp" />
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <ImageView android:id="@+id/btnHold" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_glass_circle" android:padding="18dp" android:src="@android:drawable/ic_media_pause" app:tint="@color/white" />
+                    <TextView android:id="@+id/txtHold" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Hold" android:textColor="@color/white" android:layout_marginTop="8dp" android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                    <ImageView android:id="@+id/btnContacts" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_glass_circle" android:padding="18dp" android:src="@android:drawable/ic_menu_my_calendar" app:tint="@color/white" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Contacts" android:textColor="@color/white" android:layout_marginTop="8dp" android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
         <ImageButton
             android:id="@+id/btnEndCall"
-            android:layout_width="70dp"
-            android:layout_height="70dp"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
             android:layout_alignParentBottom="true"
             android:layout_centerHorizontal="true"
             android:layout_marginBottom="40dp"
             android:background="@drawable/bg_slider_thumb_red"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
             android:padding="20dp"
-            android:scaleType="fitCenter"
+            android:elevation="6dp"
             app:tint="@color/white" />
 
-        <GridLayout
-            android:id="@+id/keypadContainer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:background="#EF000000"
-            android:padding="20dp"
-            android:rowCount="4"
-            android:columnCount="3"
-            android:visibility="gone">
-            <Button android:id="@+id/key1" android:text="1" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key2" android:text="2" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key3" android:text="3" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key4" android:text="4" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key5" android:text="5" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key6" android:text="6" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key7" android:text="7" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key8" android:text="8" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key9" android:text="9" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/keyStar" android:text="*" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/key0" android:text="0" style="@style/KeypadButtonStyle"/>
-            <Button android:id="@+id/keyHash" android:text="#" style="@style/KeypadButtonStyle"/>
-        </GridLayout>
-
-    </RelativeLayout>
-
-    <RelativeLayout
-        android:id="@+id/incomingRLView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:paddingTop="40dp">
-
-        <TextView
-            android:id="@+id/incomingTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerHorizontal="true"
-            android:text="Incoming Call"
-            android:textColor="#E0E0E0"
-            android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/incomingNumber"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/incomingTitle"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="5dp"
-            android:text="+1 000 000 000"
-            android:textColor="@color/white"
-            android:textSize="24sp"
-            android:textStyle="bold" />
-
-        <RelativeLayout
-            android:id="@+id/incomingProfileContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/incomingNumber"
-            android:layout_marginTop="50dp"
-            android:gravity="center">
-            
-            <ImageView
-                android:id="@+id/incomingProfilePic"
-                android:layout_width="180dp"
-                android:layout_height="180dp"
-                android:src="@android:drawable/sym_def_app_icon"
-                android:background="@drawable/bg_glass_card"
-                android:padding="4dp"
-                android:clipToOutline="true"
-                app:tint="@color/white" />
-        </RelativeLayout>
-
-        <TextView
-            android:id="@+id/incomingCallerName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/incomingProfileContainer"
-            android:text="Loading..."
-            android:textAlignment="center"
-            android:textColor="@color/white"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            android:layout_marginTop="20dp"/>
-
-        <TextView
-            android:id="@+id/incomingLocation"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/incomingCallerName"
-            android:layout_marginTop="8dp"
-            android:text="Analyzing Caller ID..."
-            android:gravity="center"
-            android:textColor="#E0E0E0"
-            android:textSize="16sp"/>
-
-        <RelativeLayout
-            android:id="@+id/sliderTrack"
-            android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:layout_alignParentBottom="true"
-            android:layout_marginBottom="60dp"
-            android:layout_marginHorizontal="30dp"
-            android:background="@drawable/bg_slider_track">
-
-            <TextView
-                android:id="@+id/sliderText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_centerInParent="true"
-                android:text="Slide to Answer >>>"
-                android:textColor="#B3FFFFFF"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <ImageButton
-                android:id="@+id/btnIncomingDecline"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_slider_thumb_red"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:padding="18dp"
-                android:scaleType="fitCenter"
-                app:tint="@color/white" />
-
-            <ImageButton
-                android:id="@+id/btnIncomingAnswer"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_slider_thumb_green"
-                android:src="@android:drawable/ic_menu_call"
-                android:padding="18dp"
-                android:scaleType="fitCenter"
-                android:elevation="6dp"
-                app:tint="@color/white" />
-
-        </RelativeLayout>
     </RelativeLayout>
 </RelativeLayout>

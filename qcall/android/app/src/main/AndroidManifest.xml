@@ -24,6 +24,7 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
     
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
 
     <application
         android:name=".MainApplication"
@@ -142,6 +143,11 @@
                 <data android:scheme="tel" />
             </intent-filter>
         </activity-alias>
-
+        <receiver android:name=".messages.SmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+                <action android:name="android.provider.Telephony.SMS_DELIVER" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

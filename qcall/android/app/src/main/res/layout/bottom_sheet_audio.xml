@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" 
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#1E293B" 
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:elevation="10dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginBottom="20dp"
+        android:text="Audio Route"
+        android:textColor="#94A3B8"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textAllCaps="true" />
+
+    <LinearLayout
+        android:id="@+id/routeEarpiece"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:padding="16dp"
+        android:orientation="horizontal">
+        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@android:drawable/stat_sys_phone_call" app:tint="#FFFFFF" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:text="Phone Earpiece" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/routeSpeaker"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:padding="16dp"
+        android:orientation="horizontal">
+        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@android:drawable/stat_sys_speakerphone" app:tint="#FFFFFF" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:text="Speakerphone" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/routeBluetooth"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:padding="16dp"
+        android:visibility="gone" 
+        android:orientation="horizontal">
+        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@android:drawable/stat_sys_data_bluetooth" app:tint="#3B82F6" />
+        <TextView android:id="@+id/txtRouteBluetooth" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:text="Bluetooth Device" android:textColor="#3B82F6" android:textSize="18sp" android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

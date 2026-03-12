@@ -9,8 +9,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Build
-import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
+import androidx.core.graphics.drawable.IconCompat
 import com.rkgroup.qcall.CallActivity
 import com.rkgroup.qcall.R
 import com.rkgroup.qcall.native_telephony.NotificationActionReceiver
@@ -28,7 +29,7 @@ object NotificationHelper {
             val channel = NotificationChannel(CHANNEL_ID, "Incoming Calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Notifications for incoming calls"
                 
-                // 🟢 CRITICAL FIX: Completely silent and still so QCallInCallService can take over
+                // CRITICAL FIX: Completely silent and still so QCallInCallService can take over
                 setSound(null, null) 
                 enableVibration(false)
                 
@@ -51,7 +52,7 @@ object NotificationHelper {
 
     fun createIncomingCallNotification(context: Context, callerName: String, callerNumber: String, photo: Bitmap?): Notification {
         
-        // 1. Fullscreen Intent
+        // 1. Fullscreen Intent (Wakes up the screen)
         val fullScreenIntent = Intent(context, CallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("contact_name", callerName)
@@ -62,7 +63,7 @@ object NotificationHelper {
             context, 123, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 2. Answer Intent
+        // 2. Answer Intent (Green Button)
         val acceptIntent = Intent(context, CallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("call_status", "Active") 
@@ -74,39 +75,32 @@ object NotificationHelper {
             context, 100, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 3. Decline Intent
+        // 3. Decline Intent (Red Button)
         val declineIntent = Intent(context, NotificationActionReceiver::class.java).apply { action = "ACTION_DECLINE" }
         val declinePendingIntent = PendingIntent.getBroadcast(
             context, 101, declineIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val customLayout = RemoteViews(context.packageName, R.layout.notification_incoming_call)
-        customLayout.setTextViewText(R.id.notif_name, callerName)
-        customLayout.setTextViewText(R.id.notif_number, callerNumber)
-        
-        if (photo != null) {
-            customLayout.setImageViewBitmap(R.id.notif_image, photo)
-        } else {
-            customLayout.setImageViewResource(R.id.notif_image, android.R.drawable.sym_def_app_icon)
-        }
-        
-        customLayout.setOnClickPendingIntent(R.id.notif_btn_accept, acceptPendingIntent)
-        customLayout.setOnClickPendingIntent(R.id.notif_btn_decline, declinePendingIntent)
+        // 🟢 NEW: Create a "Person" object for the native CallStyle
+        val callerIcon = if (photo != null) IconCompat.createWithBitmap(photo) else null
+        val caller = Person.Builder()
+            .setName(callerName.ifEmpty { callerNumber })
+            .setIcon(callerIcon)
+            .setImportant(true)
+            .build()
 
-        // Build Notification
+        // 🟢 NEW: Build Notification using native CallStyle instead of RemoteViews
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.sym_action_call)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-            .setCustomContentView(customLayout)
-            .setCustomHeadsUpContentView(customLayout)
+            .setSmallIcon(R.mipmap.ic_launcher) // Replaced with your app icon
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true) 
             .setAutoCancel(false)
             .setFullScreenIntent(fullScreenPendingIntent, true)
+            // THIS is the magic line that creates the beautiful system-level UI
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, declinePendingIntent, acceptPendingIntent))
 
-        // 🟢 REMOVED FLAG_INSISTENT: We don't want the OS looping anything anymore, our Kotlin engine handles it.
         return builder.build()
     }
 
@@ -122,19 +116,24 @@ object NotificationHelper {
         val hangupIntent = Intent(context, NotificationActionReceiver::class.java).apply { action = "ACTION_DECLINE" }
         val hangupPendingIntent = PendingIntent.getBroadcast(context, 457, hangupIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+        // 🟢 UPGRADED: Let's make the ongoing call notification use CallStyle too!
+        val caller = Person.Builder()
+            .setName(callerName.ifEmpty { callerNumber })
+            .setImportant(true)
+            .build()
+
         return NotificationCompat.Builder(context, ONGOING_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle(callerName)
-            .setContentText("Call in progress")
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "End Call", hangupPendingIntent)
+            .setStyle(NotificationCompat.CallStyle.forOngoingCall(caller, hangupPendingIntent))
             .build()
     }
 
     // ==========================================
-    // 🟢 REACT NATIVE TEST HELPERS
+    // REACT NATIVE TEST HELPERS
     // ==========================================
     fun showTestNotification(context: Context, name: String, number: String) {
         createNotificationChannel(context)

@@ -17,6 +17,8 @@ import androidx.core.app.NotificationCompat
 import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.rkgroup.qcall.MainActivity
+import com.rkgroup.qcall.R // Added to access your mipmap icon
 
 class SmsReceiver : BroadcastReceiver() {
 
@@ -43,7 +45,7 @@ class SmsReceiver : BroadcastReceiver() {
                 val timestamp = sms.timestampMillis
                 val coreId = SmsDatabaseHelper.getCore10Digits(sender)
 
-                // 1. Save to our Custom Shadow DB (The fuzzy match in Helper will further protect against duplicates)
+                // 1. Save to our Custom Shadow DB 
                 dbHelper.insertMessage(db, coreId, sender, body, timestamp, 1)
 
                 // 2. If we are the default app, WE are responsible for writing to the Android Master Database
@@ -56,7 +58,7 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                 } catch (e: Exception) { }
 
-                // 3. Show standard push notification
+                // 3. Show standard push notification (NOW WITH DEEP LINKING)
                 showNotification(context, sender, body, timestamp)
 
                 // 4. Tell React Native UI to reload the chat
@@ -109,20 +111,40 @@ class SmsReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        val pendingIntent = PendingIntent.getActivity(context, sender.hashCode(), launchIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // 🟢 1. CREATE THE DEEP LINK URL
+        // We URL-encode the parameters just in case the name has weird characters
+        val encodedSender = Uri.encode(sender)
+        val encodedName = Uri.encode(contactName)
+        val deepLinkUri = Uri.parse("qcall://chat?senderId=$encodedSender&senderName=$encodedName")
 
+        // 🟢 2. CREATE THE WAKE-UP INTENT
+        val clickIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = deepLinkUri // Attach the Deep Link URL
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        // 🟢 3. WRAP IT IN A PENDING INTENT
+        val pendingIntent = PendingIntent.getActivity(
+            context, 
+            sender.hashCode(), // Unique ID so chats don't overwrite each other
+            clickIntent, 
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // 🟢 4. BUILD THE NOTIFICATION
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(context.applicationInfo.icon) 
+            .setSmallIcon(R.mipmap.ic_launcher) // Uses your beautiful blue Q Icon
             .setContentTitle(contactName)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
+            .setAutoCancel(true) // Clears the notification when tapped
+            .setContentIntent(pendingIntent) // Adds the deep link tap action
 
-        if (avatarBitmap != null) builder.setLargeIcon(avatarBitmap)
+        if (avatarBitmap != null) {
+            builder.setLargeIcon(avatarBitmap)
+        }
+        
         notificationManager.notify(sender.hashCode(), builder.build())
     }
 }

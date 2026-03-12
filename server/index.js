@@ -7,7 +7,8 @@ const dotenv = require('dotenv');
 const authRoutes = require('./routes/auth');
 const contactRoutes = require('./routes/contactRoutes');
 const profileRoutes = require('./routes/profileRoutes'); 
-const planRoutes = require('./routes/planRoutes'); // 🟢 NEW: Import Plan Routes
+const planRoutes = require('./routes/planRoutes'); 
+const govServiceRoutes = require('./routes/govServiceRoutes'); // 🟢 NEW: Import Gov Services Routes
 
 dotenv.config();
 const app = express();
@@ -39,7 +40,8 @@ app.get('/api/health', (req, res) => res.status(200).send("OK"));
 app.use('/api/auth', authRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/plans', planRoutes); // 🟢 NEW: Register Plan Routes
+app.use('/api/plans', planRoutes); 
+app.use('/api/gov-services', govServiceRoutes); // 🟢 NEW: Register Gov Services Routes
 
 // 6. START SERVER
 app.listen(PORT, () => {

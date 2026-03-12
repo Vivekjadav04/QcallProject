@@ -2,84 +2,27 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_splash_gradient"> 
+    android:background="#FFFFFF"> 
 
-    <FrameLayout
-        android:layout_width="300dp"
-        android:layout_height="300dp"
-        android:layout_centerInParent="true">
+    <ImageView
+        android:id="@+id/logo_img"
+        android:layout_width="250dp" 
+        android:layout_height="250dp"
+        android:layout_centerInParent="true"
+        android:src="@drawable/qcall_icon" /> 
 
-        <ImageView
-            android:id="@+id/ripple_1"
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:src="@drawable/circle_white"
-            android:layout_gravity="center"
-            android:alpha="0" />
-
-        <ImageView
-            android:id="@+id/ripple_2"
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:src="@drawable/circle_white"
-            android:layout_gravity="center"
-            android:alpha="0" />
-
-        <TextView
-            android:id="@+id/logo_text"
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            android:layout_gravity="center"
-            android:background="@drawable/circle_white"
-            android:gravity="center"
-            android:text="Q"
-            android:textColor="#FFFFFF"
-            android:textSize="72sp"
-            android:textStyle="normal"
-            android:fontFamily="sans-serif-light"
-            android:elevation="12dp" />
-            
-    </FrameLayout>
-
-    <LinearLayout
-        android:id="@+id/text_container"
+    <TextView
+        android:id="@+id/qcall_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
+        android:layout_below="@id/logo_img"
         android:layout_centerHorizontal="true"
-        android:layout_marginBottom="60dp"
-        android:background="@drawable/bg_glass_card"
-        android:paddingHorizontal="40dp"
-        android:paddingVertical="16dp"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:elevation="8dp"
-        android:alpha="0">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="QCall"
-            android:textColor="#FFFFFF"
-            android:textSize="36sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-black"
-            android:letterSpacing="0.05"
-            android:shadowColor="#40000000"
-            android:shadowDx="0"
-            android:shadowDy="2"
-            android:shadowRadius="4" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Secure. Fast. Private."
-            android:textColor="#E6FFFFFF"
-            android:textSize="14sp"
-            android:fontFamily="sans-serif-medium"
-            android:layout_marginTop="4dp"
-            android:letterSpacing="0.1"/>
-
-    </LinearLayout>
+        android:layout_marginTop="10dp"
+        android:text="QCall"
+        android:textColor="#1E3A8A" 
+        android:textSize="42sp"
+        android:fontFamily="sans-serif-black"
+        android:letterSpacing="0.05"
+        android:alpha="0" /> 
 
 </RelativeLayout>

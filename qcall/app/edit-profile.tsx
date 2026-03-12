@@ -1,7 +1,6 @@
-// File: app/edit-profile.tsx
 import React, { useState } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform, ActivityIndicator
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,7 +55,7 @@ const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
           />
         </Svg>
         <Image source={{ uri: imageUri || 'https://i.pravatar.cc/150?img=12' }} style={styles.avatar} />
-        <TouchableOpacity style={styles.cameraBtn} onPress={onEdit}>
+        <TouchableOpacity style={styles.cameraBtn} onPress={onEdit} activeOpacity={0.8}>
           <Ionicons name="camera" size={18} color="#FFF" />
         </TouchableOpacity>
       </View>
@@ -68,12 +67,14 @@ const ProfileProgress = ({ percentage, imageUri, onEdit }: any) => {
 export default function EditProfileScreen() {
   const router = useRouter();
   
-  // 🟢 USE THE NEW HOOK (Includes saveProfile)
   const { user, updateUser, saveProfile } = useAuth(); 
   const { showAlert } = useCustomAlert();
 
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  
+  // 🟢 NEW STATE FOR IMAGE MODAL
+  const [showImageModal, setShowImageModal] = useState(false);
 
   const calculateProgress = () => {
     if (!user) return 0;
@@ -88,15 +89,49 @@ export default function EditProfileScreen() {
     return (filledCount / (textFields.length + 1)) * 100;
   };
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: true,
-    });
-    if (!result.canceled && result.assets[0].base64) {
-      const base64Img = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      updateUser({ profilePhoto: base64Img }); 
+  // 🟢 UPGRADED IMAGE PICKER FUNCTION
+  const pickImage = async (mode: 'camera' | 'gallery') => {
+    setShowImageModal(false);
+
+    try {
+      let result;
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1], // Perfect square
+        quality: 0.5,
+        base64: true,
+      };
+
+      if (mode === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            showAlert("Permission Denied", "Camera access is required to take photos.", "error");
+            return;
+        }
+        result = await ImagePicker.launchCameraAsync(options);
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            showAlert("Permission Denied", "Gallery access is required to choose photos.", "error");
+            return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync(options);
+      }
+
+      if (!result.canceled && result.assets[0].base64) {
+        const base64Img = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        updateUser({ profilePhoto: base64Img }); 
+      }
+    } catch (error) {
+      showAlert("Error", "Could not process the image.", "error");
     }
+  };
+
+  // 🟢 REMOVE IMAGE FUNCTION
+  const removeImage = () => {
+    setShowImageModal(false);
+    updateUser({ profilePhoto: '' }); 
   };
 
   const handleChange = (key: string, value: string) => updateUser({ [key]: value });
@@ -119,15 +154,12 @@ export default function EditProfileScreen() {
     updateUser({ tags: newTags });
   };
 
-  // 🟢 UPDATED SAVE FUNCTION
   const handleManualSave = async () => {
     if (!user) return;
     setIsSaving(true);
 
     try {
-        // Use the hook to save to DB
         await saveProfile(user);
-        
         showAlert("Success", "Profile updated successfully!", "success", () => {
             router.back(); 
         });
@@ -159,7 +191,11 @@ export default function EditProfileScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex:1}} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           
-          <ProfileProgress percentage={calculateProgress()} imageUri={user.profilePhoto} onEdit={pickImage} />
+          <ProfileProgress 
+            percentage={calculateProgress()} 
+            imageUri={user.profilePhoto} 
+            onEdit={() => setShowImageModal(true)} 
+          />
 
           <Text style={styles.sectionHeader}>Personal Info</Text>
           <View style={styles.card}>
@@ -251,6 +287,40 @@ export default function EditProfileScreen() {
           <View style={{height: 350}} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* 🟢 CUSTOM IMAGE PICKER BOTTOM SHEET */}
+      <Modal visible={showImageModal} transparent animationType="fade" onRequestClose={() => setShowImageModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowImageModal(false)}>
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Profile Photo</Text>
+            
+            <TouchableOpacity style={styles.modalOption} onPress={() => pickImage('camera')}>
+              <View style={[styles.modalIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="camera" size={22} color="#0056D2" />
+              </View>
+              <Text style={styles.modalOptionText}>Take a Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalOption} onPress={() => pickImage('gallery')}>
+              <View style={[styles.modalIconBox, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="image" size={22} color="#16A34A" />
+              </View>
+              <Text style={styles.modalOptionText}>Choose from Gallery</Text>
+            </TouchableOpacity>
+
+            {user?.profilePhoto ? (
+              <TouchableOpacity style={styles.modalOption} onPress={removeImage}>
+                <View style={[styles.modalIconBox, { backgroundColor: '#FEF2F2' }]}>
+                  <Ionicons name="trash" size={22} color="#EF4444" />
+                </View>
+                <Text style={[styles.modalOptionText, { color: '#EF4444' }]}>Remove Photo</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -284,5 +354,14 @@ const styles = StyleSheet.create({
   tagTextSelected: { color: '#FFF', fontWeight: '600', fontSize: 13 },
   tagPillSuggestion: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F2F5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#E1E8ED' },
   tagTextSuggestion: { color: '#444', fontWeight: '500', fontSize: 13 },
-  placeholderText: { fontStyle: 'italic', color: '#999', fontSize: 13 }
+  placeholderText: { fontStyle: 'italic', color: '#999', fontSize: 13 },
+
+  // 🟢 IMAGE MODAL STYLES
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 10 },
+  modalHandle: { width: 40, height: 5, backgroundColor: '#E2E8F0', borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#1A1A1A', marginBottom: 20 },
+  modalOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  modalIconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  modalOptionText: { fontSize: 16, color: '#333', fontWeight: '600' }
 });

@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform, ToastAndroid } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
-import { THEME } from '../constants/theme'; 
+import notifee, { EventType } from '@notifee/react-native'; // 🟢 ADDED NOTIFEE FOR DEEP LINKING
 import axios from 'axios'; 
+
+import { THEME } from '../constants/theme'; 
 import { API_BASE_URL } from '../constants/config'; 
 
-// 🟢 1. CONTEXT IMPORTS
+// CONTEXT IMPORTS
 import { AuthProvider, useAuth } from '../hooks/useAuth'; 
 import { AlertProvider } from '../context/AlertContext'; 
-import { ContactProvider } from '../context/ContactContext'; // 🟢 NEW
-import { SecureOperationsProvider } from '../context/SecureOperationsContext'; // 🟢 NEW
+import { ContactProvider } from '../context/ContactContext'; 
+import { SecureOperationsProvider } from '../context/SecureOperationsContext'; 
 
-import CustomAlert from '../components/CustomAlert'; 
-
-// 🟢 2. INNER COMPONENT (The Logic)
 function AppContent() {
   const { user, loading: authLoading } = useAuth(); 
   const isAuthenticated = !!user; 
@@ -24,51 +23,66 @@ function AppContent() {
   const router = useRouter();
   const segments = useSegments();
   const [isMounted, setIsMounted] = useState(false);
-
-  // 🛡️ Server Health State
-  const [isServerReady, setServerReady] = useState(false);
   const [isCheckingServer, setCheckingServer] = useState(true);
-  const [showServerAlert, setShowServerAlert] = useState(false);
 
-  // 1. Mount Check
+  // 1. Mount & Setup Deep Linking
   useEffect(() => {
     setIsMounted(true);
     checkServerHealth(); 
+
+    // 🟢 DEEP LINKING: Listen for notification clicks globally
+    const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.PRESS && detail.notification?.data?.senderId) {
+        console.log("Notification tapped! Routing to chat:", detail.notification.data.senderId);
+        router.push({
+          pathname: '../messages/chat',
+          params: { 
+            senderId: String(detail.notification.data.senderId),
+            senderName: String(detail.notification.data.senderName || ''),
+            isBank: String(detail.notification.data.isBank || 'false')
+          }
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  // 2. The Server Health Check Function
+  // 2. The Resilient Server Health Check
   const checkServerHealth = async () => {
-    setCheckingServer(true);
-    setShowServerAlert(false);
-
     try {
       console.log(`[Health Gate] Pinging: ${API_BASE_URL}`);
       await axios.get(API_BASE_URL, { timeout: 4000 });
       console.log("[Health Gate] Server is Online 🟢");
-      setServerReady(true);
     } catch (error) {
       console.error("[Health Gate] Server Unreachable 🔴", error);
-      setServerReady(false);
-      setShowServerAlert(true); 
+      // 🟢 OFFLINE MODE: We don't block the app anymore. We just notify the user.
+      if (Platform.OS === 'android') {
+        ToastAndroid.show("Offline Mode: Basic call features available", ToastAndroid.LONG);
+      }
     } finally {
       setCheckingServer(false);
     }
   };
 
-  // 3. Auth Guard Logic
+  // 3. Auth Guard Logic (No longer blocked by server status)
   useEffect(() => {
-    if (authLoading || !isMounted || !isServerReady) return;
+    if (authLoading || !isMounted || isCheckingServer) return;
 
     const inAuthGroup = segments[0] === 'login' || segments[0] === 'register' || segments[0] === 'otp';
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/login');
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/welcome');
+      // 🟢 PERMISSION TIMING: Only go to welcome AFTER login is done.
+      router.replace('/welcome'); 
     }
-  }, [isAuthenticated, authLoading, segments, isMounted, isServerReady]);
+  }, [isAuthenticated, authLoading, segments, isMounted, isCheckingServer]);
 
-  const showLoading = (authLoading || !isMounted || isCheckingServer) && !showServerAlert;
+  // Only show loading while checking local auth state or initial server ping
+  const showLoading = authLoading || !isMounted || isCheckingServer;
 
   return (
     <View style={{ flex: 1, backgroundColor: THEME.colors.bg }}>
@@ -77,6 +91,8 @@ function AppContent() {
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="otp" />
+        <Stack.Screen name="welcome" /> 
+        <Stack.Screen name="chat" /> 
         <Stack.Screen name="edit-profile" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="caller-id/view-profile" options={{ presentation: 'modal' }} />
@@ -84,15 +100,7 @@ function AppContent() {
         <Stack.Screen name="caller-id/spam-report" options={{ presentation: 'modal' }} />
       </Stack>
 
-      <CustomAlert 
-        visible={showServerAlert}
-        type="error"
-        title="Connection Failed"
-        message="We cannot reach the Qcall servers. Please check your internet or try again."
-        actionText="Retry Connection"
-        onAction={checkServerHealth} 
-      />
-
+      {/* 🟢 Removed the blocking CustomAlert so the app never gets stuck */}
       {showLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={THEME.colors.primary} />
@@ -102,7 +110,7 @@ function AppContent() {
   );
 }
 
-// 🟢 3. ROOT EXPORT
+// ROOT EXPORT
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -112,7 +120,6 @@ export default function RootLayout() {
   }, []);
 
   return (
-    // 🟢 PROVIDER TREE: Alert -> Auth -> Contact -> SecureOps
     <AlertProvider> 
       <AuthProvider>
         <ContactProvider>

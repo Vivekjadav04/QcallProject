@@ -243,14 +243,11 @@ export default function ContactDetailScreen() {
     }
   };
 
-  const handleEdit = async () => {
+  // 🟢 NEW: Routes to our custom Qcall editor instead of Google!
+  const handleEdit = () => {
     if (contactId) {
         Haptics.selectionAsync();
-        try { 
-            await CallManagerModule.editContactNative(contactId as string); 
-        } catch (e) {
-            Alert.alert("Error", "Could not open native contact editor.");
-        }
+        router.push({ pathname: '/save_contact', params: { editContactId: contactId } });
     }
   };
 

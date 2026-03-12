@@ -1,17 +1,13 @@
 package com.rkgroup.qcall
 
-import android.animation.AnimatorSet
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.View
-import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
-import android.widget.TextView // 🟢 Added this import
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 class SplashActivity : AppCompatActivity() {
@@ -20,68 +16,44 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        // 🟢 UPDATED: It is now a TextView, and the ID is logo_text
-        val logo = findViewById<TextView>(R.id.logo_text)
-        val ripple1 = findViewById<ImageView>(R.id.ripple_1)
-        val ripple2 = findViewById<ImageView>(R.id.ripple_2)
-        val textContainer = findViewById<View>(R.id.text_container)
+        val logo = findViewById<ImageView>(R.id.logo_img)
+        val qcallText = findViewById<TextView>(R.id.qcall_text)
 
-        // 1. ANIMATION: Bouncy Logo Pop-in
-        logo.scaleX = 0f
-        logo.scaleY = 0f
+        // 1. INITIAL STATE: Logo is tiny, Text is invisible and pushed down
         logo.alpha = 0f
+        logo.scaleX = 0.2f
+        logo.scaleY = 0.2f
+        
+        qcallText.alpha = 0f
+        qcallText.translationY = 60f // Pushed down by 60 pixels
 
+        // 2. THE OUTSTANDING ZOOM: Bounces past 100% and settles
         logo.animate()
-            .scaleX(1f).scaleY(1f).alpha(1f)
-            .setDuration(800)
-            .setInterpolator(OvershootInterpolator(1.5f)) // The "Bounce" factor
-            .start()
-
-        // 2. ANIMATION: Ripples (Signal Effect)
-        // Starts after logo pops in
-        Handler(Looper.getMainLooper()).postDelayed({
-            startRipple(ripple1, 0)
-            startRipple(ripple2, 800) // Second ripple starts later
-        }, 500)
-
-        // 3. ANIMATION: Glassmorphism Card Slide Up
-        textContainer.translationY = 100f
-        textContainer.animate()
-            .translationY(0f).alpha(1f)
-            .setDuration(800)
-            .setStartDelay(600) // Wait for logo to finish bouncing
-            .setInterpolator(AccelerateDecelerateInterpolator())
-            .start()
-
-        // 4. NAVIGATION: Go to Main App after 4 seconds
-        Handler(Looper.getMainLooper()).postDelayed({
-            val intent = Intent(this, MainActivity::class.java)
-            startActivity(intent)
-            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-            finish()
-        }, 4000)
-    }
-
-    // Helper to create infinite ripple effect
-    private fun startRipple(view: View, delay: Long) {
-        val scaleX = ObjectAnimator.ofFloat(view, "scaleX", 1f, 3.5f)
-        val scaleY = ObjectAnimator.ofFloat(view, "scaleY", 1f, 3.5f)
-        val alpha = ObjectAnimator.ofFloat(view, "alpha", 0.4f, 0f)
-
-        val set = AnimatorSet()
-        set.playTogether(scaleX, scaleY, alpha)
-        set.duration = 2000 // Speed of ripple
-        set.startDelay = delay
-        set.interpolator = AccelerateDecelerateInterpolator()
-        
-        // Make it repeat infinitely
-        for (anim in set.childAnimations) {
-            if (anim is ValueAnimator) {
-                anim.repeatCount = ValueAnimator.INFINITE
-                anim.repeatMode = ValueAnimator.RESTART
+            .alpha(1f) 
+            .scaleX(1f) 
+            .scaleY(1f) 
+            .setDuration(1000)
+            .setInterpolator(OvershootInterpolator(1.2f)) // The magic "bounce" factor
+            .withEndAction {
+                
+                // 3. TEXT ANIMATION: Glides up and fades in after logo settles
+                qcallText.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(600)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction {
+                        
+                        // 4. TRANSITION: Wait half a second, then open the app
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            val intent = Intent(this@SplashActivity, MainActivity::class.java)
+                            startActivity(intent)
+                            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                            finish() 
+                        }, 500)
+                    }
+                    .start()
             }
-        }
-        
-        set.start()
+            .start()
     }
 }

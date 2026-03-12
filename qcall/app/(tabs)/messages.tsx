@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, PermissionsAndroid, Platform, TouchableOpacity, ScrollView, Vibration, UIManager, Image, TextInput, Animated, NativeModules, DeviceEventEmitter, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, PermissionsAndroid, Platform, TouchableOpacity, ScrollView, Vibration, UIManager, Image, TextInput, Animated, NativeModules, DeviceEventEmitter, RefreshControl, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -24,7 +24,7 @@ interface GroupedConversation {
   conversationId: string; address: string; displayName: string; displayImage?: string; lastMessage: string; timestamp: number; category: string;
 }
 
-const THEME = { colors: { bg: '#F8FAFC', primary: '#0F172A', textMain: '#1E293B', textSub: '#64748B', skeleton: '#E2E8F0', accent: '#6366F1', border: '#E2E8F0' } };
+const THEME = { colors: { bg: '#F8FAFC', primary: '#0F172A', textMain: '#1E293B', textSub: '#64748B', skeleton: '#E2E8F0', accent: '#6366F1', border: '#E2E8F0', danger: '#EF4444' } };
 
 // 🚀 PROGRESS BAR COMPONENT
 const SyncProgressBar = ({ progress }: { progress: number }) => {
@@ -60,8 +60,8 @@ const SkeletonItem = () => {
   );
 };
 
-// 🟢 NEW: UNIFIED HEADER COMPONENT
-const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress }: any) => {
+// 🟢 UNIFIED HEADER COMPONENT
+const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onProfilePress, onScannerPress, onMenuPress }: any) => {
   return (
     <View style={styles.headerWrapper}>
       <View style={styles.newHeaderRow}>
@@ -77,7 +77,7 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
            )}
         </TouchableOpacity>
 
-        {/* 2. Center Search Bar (Qcall text + input + search icon) */}
+        {/* 2. Center Search Bar */}
         <View style={styles.searchBlock}>
           <Text style={styles.qcallLogoText}>Qcall</Text>
           <TextInput 
@@ -90,12 +90,12 @@ const HeaderComponent = React.memo(({ searchText, setSearchText, userPhoto, onPr
         </View>
 
         {/* 3. Scanner Icon */}
-        <TouchableOpacity style={styles.headerActionBtn} onPress={() => { console.log("Scanner Will Open Here") }}>
+        <TouchableOpacity style={styles.headerActionBtn} onPress={onScannerPress}>
            <MaterialCommunityIcons name="qrcode-scan" size={24} color={THEME.colors.textMain} />
         </TouchableOpacity>
 
         {/* 4. Three Dots (Filter/Menu) */}
-        <TouchableOpacity style={styles.headerActionBtn} onPress={() => {}}>
+        <TouchableOpacity style={styles.headerActionBtn} onPress={onMenuPress}>
            <MaterialCommunityIcons name="dots-vertical" size={26} color={THEME.colors.textMain} />
         </TouchableOpacity>
 
@@ -121,6 +121,9 @@ export default function MessageScreen() {
   const [contactMap, setContactMap] = useState<Map<string, { name: string, imageUri?: string }>>(new Map());
   const [visibleCount, setVisibleCount] = useState(15);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  // 🟢 NEW STATE FOR MENU MODAL
+  const [showMenuModal, setShowMenuModal] = useState(false);
 
   useFocusEffect(useCallback(() => { checkPermissionsAndLoad(); }, []));
 
@@ -297,7 +300,14 @@ export default function MessageScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" backgroundColor={THEME.colors.bg} />
-      <HeaderComponent searchText={searchText} setSearchText={setSearchText} onProfilePress={() => router.push('/profile')} userPhoto={user?.profilePhoto} />
+      <HeaderComponent 
+        searchText={searchText} 
+        setSearchText={setSearchText} 
+        onProfilePress={() => router.push('/profile')} 
+        userPhoto={user?.profilePhoto} 
+        onScannerPress={() => router.push('/scanner')}
+        onMenuPress={() => setShowMenuModal(true)} // 🟢 Opens Menu Modal
+      />
       
       {isSyncing && <SyncProgressBar progress={syncProgress} />}
 
@@ -317,6 +327,48 @@ export default function MessageScreen() {
           <View style={styles.fabIcon}><MaterialCommunityIcons name="pencil-outline" size={24} color="#FFF" /></View>
           <Text style={styles.fabText}>Compose</Text>
       </TouchableOpacity>
+
+      {/* 🟢 BEAUTIFUL BOTTOM SHEET MENU */}
+      <Modal transparent visible={showMenuModal} animationType="slide" onRequestClose={() => setShowMenuModal(false)}>
+          <TouchableOpacity style={styles.modalOverlayBottomSheet} activeOpacity={1} onPress={() => setShowMenuModal(false)}>
+              <View style={styles.bottomSheetModal}>
+                  <View style={styles.sheetHandle} />
+                  <Text style={styles.sheetTitle}>Settings & Services</Text>
+
+                  {/* App Settings Button */}
+                  <TouchableOpacity 
+                      style={styles.sheetOptionBtn}
+                      onPress={() => { 
+                        setShowMenuModal(false); 
+                        router.push('/settings'); 
+                      }}
+                  >
+                      <View style={[styles.sheetIconBox, { backgroundColor: '#F8FAFC' }]}>
+                        <Feather name="settings" size={22} color={THEME.colors.textSub} />
+                      </View>
+                      <Text style={styles.sheetOptionText}>App Settings</Text>
+                      <Feather name="chevron-right" size={20} color="#CBD5E1" style={{marginLeft: 'auto'}} />
+                  </TouchableOpacity>
+
+                  {/* 🟢 GOVERNMENT SERVICES BUTTON */}
+                  <TouchableOpacity 
+                      style={[styles.sheetOptionBtn, { marginTop: 5 }]}
+                      onPress={() => { 
+                        setShowMenuModal(false); 
+                        router.push('../gov_services'); 
+                      }}
+                  >
+                      <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
+                        <Feather name="shield" size={22} color="#1E3A8A" />
+                      </View>
+                      <Text style={styles.sheetOptionText}>Government Services</Text>
+                      <Feather name="chevron-right" size={20} color="#CBD5E1" style={{marginLeft: 'auto'}} />
+                  </TouchableOpacity>
+
+              </View>
+          </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -324,7 +376,6 @@ export default function MessageScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: THEME.colors.bg },
   
-  // 🟢 NEW HEADER STYLES
   headerWrapper: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, backgroundColor: THEME.colors.bg },
   newHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   profileBtn: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 5 },
@@ -361,5 +412,14 @@ const styles = StyleSheet.create({
   progressText: { fontSize: 12, fontWeight: '600', color: THEME.colors.primary },
   progressPercent: { fontSize: 12, fontWeight: '700', color: THEME.colors.accent },
   progressBarBg: { height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: THEME.colors.accent, borderRadius: 3 }
+  progressBarFill: { height: '100%', backgroundColor: THEME.colors.accent, borderRadius: 3 },
+
+  // 🟢 BOTTOM SHEET MODAL STYLES
+  modalOverlayBottomSheet: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  bottomSheetModal: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 40 },
+  sheetHandle: { width: 40, height: 4, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20, borderRadius: 2 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: THEME.colors.primary, marginBottom: 20, paddingHorizontal: 10 },
+  sheetOptionBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderRadius: 16, backgroundColor: '#FFF' },
+  sheetIconBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  sheetOptionText: { fontSize: 16, color: THEME.colors.textMain, fontWeight: '600' },
 });

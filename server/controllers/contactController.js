@@ -10,7 +10,7 @@ const SPAM_THRESHOLD = 50;
 // Helper: Clean phone numbers
 const normalizeNumber = (num) => num ? num.replace(/[^\d+]/g, '') : '';
 
-// 🟢 1. IDENTIFY CALLER (Parallel DB Search + Top Spam Category)
+// 🟢 1. IDENTIFY CALLER (Parallel DB Search + Top Spam Category + Feature Flags)
 exports.identifyCaller = async (req, res) => {
   try {
     const rawNum = req.query.number;
@@ -27,15 +27,14 @@ exports.identifyCaller = async (req, res) => {
     const [appUser, globalEntry, spamData] = await Promise.all([
         User.findOne(searchCriteria), 
         GlobalNumber.findOne(searchCriteria),
-        // 🟢 NEW: Aggregation to get Total Count AND the Most Popular Tag
         SpamReport.aggregate([
             { $match: searchCriteria },
             { $facet: {
                 totalReports: [{ $count: "count" }],
                 topTags: [
                     { $group: { _id: "$tag", count: { $sum: 1 } } },
-                    { $sort: { count: -1 } }, // Sort by highest votes
-                    { $limit: 1 } // Get the #1 most voted tag
+                    { $sort: { count: -1 } }, 
+                    { $limit: 1 } 
                 ]
             }}
         ])
@@ -45,9 +44,20 @@ exports.identifyCaller = async (req, res) => {
     const spamCount = spamData[0]?.totalReports[0]?.count || 0;
     const topSpamTag = spamData[0]?.topTags[0]?._id || null; 
 
-    // 👑 Premium / Verified Checks
     const isVerifiedUser = !!appUser;
-    const isPremiumUser = appUser ? ['gold', 'platinum'].includes(appUser.accountType) : false;
+    
+    // 👑 🟢 NEW FIX: Intelligent Feature Flag Checking
+    // Instead of checking if accountType is 'gold', we check if they have an active subscription
+    // AND if that subscription includes the 'golden_caller_id' feature.
+    let isPremiumUser = false;
+    if (appUser && appUser.subscription) {
+        const subStatus = appUser.subscription.status ? appUser.subscription.status.toLowerCase() : 'none';
+        const activeFeatures = appUser.subscription.activeFeatures || [];
+        
+        if (subStatus === 'active' && activeFeatures.includes('golden_caller_id')) {
+            isPremiumUser = true;
+        }
+    }
 
     // 🚀 SPAM LOGIC
     let spamScore = 0;
@@ -86,10 +96,9 @@ exports.identifyCaller = async (req, res) => {
             spamScore: spamScore, 
             spamReports: spamCount,
             location: globalEntry?.location || "",
-            // 🟢 Send the community's #1 voted tag to the App (e.g., "Bank Fraud")
             spamType: topSpamTag || globalEntry?.tags?.[0] || (isSpam ? "High Risk" : "Reports"),
             isVerified: isVerifiedUser, 
-            isPremium: isPremiumUser,   
+            isPremium: isPremiumUser, // <-- Dynamically set based on features  
             photo: appUser?.profilePhoto || "" 
         });
     }
@@ -114,7 +123,7 @@ exports.identifyCaller = async (req, res) => {
             location: appUser.address ? appUser.address.city : "", 
             isSpam: false,
             isVerified: true,       
-            isPremium: isPremiumUser 
+            isPremium: isPremiumUser // <-- Dynamically set based on features
         });
     }
 
@@ -179,16 +188,15 @@ exports.syncContacts = async (req, res) => {
   }
 };
 
-// 🟢 3. REPORT SPAM (The "Ballot Box" Logic)
+// 🟢 3. REPORT SPAM
 exports.reportSpam = async (req, res) => {
   try {
-    const { phoneNumber, tag, location, comment } = req.body; // 🟢 FIX: Ensure it matches the frontend's 'phoneNumber' key
-    const cleanNum = normalizeNumber(phoneNumber || req.body.number); // Fallback just in case
+    const { phoneNumber, tag, location, comment } = req.body; 
+    const cleanNum = normalizeNumber(phoneNumber || req.body.number); 
     const userId = req.user ? req.user.id : null;
 
     if (!cleanNum) return res.status(400).json({ msg: "Invalid Number" });
 
-    // 1. Cast Vote (Will fail if user already voted due to Unique Index)
     try {
         await SpamReport.create({
             phoneNumber: cleanNum,
@@ -204,15 +212,12 @@ exports.reportSpam = async (req, res) => {
         throw e;
     }
 
-    // 2. Count Total Votes
     const totalReports = await SpamReport.countDocuments({ phoneNumber: cleanNum });
 
-    // 3. Calculate New Global Score
     let newScore = 0;
     if (totalReports >= SPAM_THRESHOLD) newScore = 100;
     else newScore = Math.floor((totalReports / SPAM_THRESHOLD) * 100);
 
-    // 4. Update the "Scoreboard" (Global Number)
     await GlobalNumber.findOneAndUpdate(
       { phoneNumber: cleanNum },
       { 
@@ -230,7 +235,7 @@ exports.reportSpam = async (req, res) => {
   }
 };
 
-// 🟢 4. NOT SPAM (Updated Score Logic)
+// 🟢 4. NOT SPAM
 exports.reportNotSpam = async (req, res) => {
     try {
         const { number } = req.body;
@@ -260,7 +265,7 @@ exports.reportNotSpam = async (req, res) => {
     }
 };
 
-// 🟢 5. BLOCK NUMBER (Standard)
+// 🟢 5. BLOCK NUMBER
 exports.blockNumber = async (req, res) => {
   try {
     const { number, alsoReportSpam } = req.body;
@@ -287,7 +292,7 @@ exports.blockNumber = async (req, res) => {
   }
 };
 
-// 🟢 6. UNBLOCK NUMBER (Standard)
+// 🟢 6. UNBLOCK NUMBER
 exports.unblockNumber = async (req, res) => {
   try {
     const { number } = req.body;

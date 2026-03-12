@@ -136,7 +136,7 @@ export default function ContactsScreen() {
 
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   
-  // 🟢 FIXED: Destructuring visibleContactIds instead of hiddenContactIds
+  // 🟢 Destructuring visibleContactIds instead of hiddenContactIds
   const { accounts = [], visibleContactIds = [], toggleAccountVisibility, toggleAllAccounts, loadAccounts: refreshAccounts } = useContactFilter() || {};
 
   const [activeTab, setActiveTab] = useState<'home' | 'favorite'>('home');
@@ -392,7 +392,6 @@ export default function ContactsScreen() {
     }
   };
 
-  // 🟢 FIXED: Uses visibleContactIds from the new Allow-List logic
   const visibleContacts = useMemo(() => {
     if (visibleContactIds.includes('HIDE_ALL')) return [];
 
@@ -638,7 +637,7 @@ export default function ContactsScreen() {
             {activeTab === 'home' ? (
               <SectionList
                 ref={sectionListRef} sections={sections} keyExtractor={(item, index) => item.id + index} renderItem={renderContactItem} getItemLayout={getItemLayout as any}
-                initialNumToRender={15} maxToRenderPerBatch={10} windowSize={5}           
+                initialNumToRender={15} maxToRenderPerBatch={10} windowSize={5}          
                 renderSectionHeader={({ section: { title } }) => (<View style={styles.sectionHeader}><Text style={[styles.sectionTitle, title === 'FAVORITES' && {color: THEME.colors.gold}]}>{title}</Text></View>)}
                 ListHeaderComponent={!isSelectionMode ? ListHeader : null} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
                 refreshControl={!isSelectionMode ? <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={THEME.colors.primary} /> : undefined}
@@ -666,6 +665,7 @@ export default function ContactsScreen() {
             )}
         </View>
 
+        {/* 🟢 SIDE MENU MODAL */}
         <Modal transparent visible={showMainMenu} animationType="none" onRequestClose={() => setShowMainMenu(false)}>
             <TouchableOpacity style={styles.modalOverlaySide} activeOpacity={1} onPress={() => setShowMainMenu(false)}>
                 <View style={{flex: 1}} /> 
@@ -699,6 +699,13 @@ export default function ContactsScreen() {
                           <Text style={[styles.sideMenuText, { color: THEME.colors.danger }]}>Delete Contacts</Text>
                       </TouchableOpacity>
 
+                      {/* 🟢 NEW: GOVERNMENT SERVICES BUTTON */}
+                      <TouchableOpacity style={styles.sideMenuItem} onPress={() => { setShowMainMenu(false); router.push('../gov_services'); }}>
+                          <View style={[styles.sideMenuIconBox, { backgroundColor: '#EFF6FF' }]}><Feather name="shield" size={22} color="#1E3A8A" /></View>
+                          <Text style={styles.sideMenuText}>Government Services</Text>
+                      </TouchableOpacity>
+
+                      {/* App Settings */}
                       <TouchableOpacity style={styles.sideMenuItem} onPress={() => { setShowMainMenu(false); router.push('/settings'); }}>
                           <View style={[styles.sideMenuIconBox, { backgroundColor: '#F8FAFC' }]}><Feather name="settings" size={22} color={THEME.colors.textSub} /></View>
                           <Text style={styles.sideMenuText}>App Settings</Text>

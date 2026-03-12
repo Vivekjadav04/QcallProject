@@ -29,7 +29,7 @@ const BATCH_SIZE = 40;
 
 const THEME = {
   colors: {
-    bg: '#F8FAFC',
+    bg: '#FFFFFF', // Changed background to white for the classic list look
     card: '#FFFFFF',
     primary: '#0F172A',
     textMain: '#1E293B',
@@ -154,12 +154,12 @@ const SkeletonCallLog = () => {
   const opacity = animatedValue.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.7] });
   return (
     <View style={styles.cardItem}>
-      <Animated.View style={[styles.squircleAvatar, { backgroundColor: THEME.colors.skeleton, opacity }]} />
+      <Animated.View style={[styles.normalAvatar, { backgroundColor: THEME.colors.skeleton, opacity }]} />
       <View style={styles.cardContent}>
         <Animated.View style={{ width: '60%', height: 16, backgroundColor: THEME.colors.skeleton, borderRadius: 4, marginBottom: 8, opacity }} />
         <Animated.View style={{ width: '40%', height: 12, backgroundColor: THEME.colors.skeleton, borderRadius: 4, opacity }} />
       </View>
-      <Animated.View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: THEME.colors.skeleton, marginLeft: 10, opacity }} />
+      <Animated.View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: THEME.colors.skeleton, marginLeft: 10, opacity }} />
     </View>
   );
 };
@@ -246,7 +246,7 @@ const CallLogItem = React.memo(({ item, index, onCallPress, onRowPress, isFavori
   return (
     <Animated.View style={{ opacity: anim }}>
       <TouchableOpacity style={styles.cardItem} activeOpacity={0.7} onPress={() => onRowPress(item)}>
-        <View style={[styles.squircleAvatar, isMissed ? styles.missedAvatarBg : (!item.imageUri ? { backgroundColor: avatarStyle.backgroundColor } : {})]}>
+        <View style={[styles.normalAvatar, isMissed ? styles.missedAvatarBg : (!item.imageUri ? { backgroundColor: avatarStyle.backgroundColor } : {})]}>
           {item.imageUri ? (
             <Image source={{ uri: item.imageUri }} style={styles.realAvatar} />
           ) : (
@@ -626,7 +626,7 @@ export default function CallLogScreen() {
               onScannerPress={() => router.push('/scanner')} 
            />
            {renderTabsHeader()}
-           <View style={{ paddingHorizontal: 20 }}>
+           <View style={{ paddingHorizontal: 0 }}>
               <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Today</Text></View>
               {[1, 2, 3, 4, 5, 6].map((k) => <SkeletonCallLog key={k} />)}
            </View>
@@ -758,7 +758,7 @@ export default function CallLogScreen() {
 
                     <View style={styles.sheetDivider} />
 
-                    {/* Settings Button */}
+                    {/* App Settings Button */}
                     <TouchableOpacity 
                         style={styles.sheetOptionBtn}
                         onPress={() => { 
@@ -770,6 +770,21 @@ export default function CallLogScreen() {
                           <Feather name="settings" size={22} color={THEME.colors.textSub} />
                         </View>
                         <Text style={styles.sheetOptionText}>App Settings</Text>
+                        <Feather name="chevron-right" size={20} color="#CBD5E1" style={{marginLeft: 'auto'}} />
+                    </TouchableOpacity>
+
+                    {/* 🟢 NEW: GOVERNMENT SERVICES BUTTON */}
+                    <TouchableOpacity 
+                        style={[styles.sheetOptionBtn, { marginTop: 5 }]}
+                        onPress={() => { 
+                          setShowFilterModal(false); 
+                          router.push('../gov_services'); 
+                        }}
+                    >
+                        <View style={[styles.sheetIconBox, { backgroundColor: '#EFF6FF' }]}>
+                          <Feather name="shield" size={22} color="#1E3A8A" />
+                        </View>
+                        <Text style={styles.sheetOptionText}>Government Services</Text>
                         <Feather name="chevron-right" size={20} color="#CBD5E1" style={{marginLeft: 'auto'}} />
                     </TouchableOpacity>
 
@@ -807,11 +822,15 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, backgroundColor: THEME.colors.bg },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },
   
-  cardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', marginHorizontal: 20, marginBottom: 8, padding: 14, borderRadius: 18, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1, borderWidth: 1, borderColor: '#F1F5F9' },
-  squircleAvatar: { width: 46, height: 46, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  // 🟢 Updated "Normal" Card Style
+  cardItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: THEME.colors.border },
+  
+  // 🟢 Updated Avatar Style to perfect circle
+  normalAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   missedAvatarBg: { backgroundColor: THEME.colors.dangerBg },
-  realAvatar: { width: 46, height: 46, borderRadius: 16 },
+  realAvatar: { width: 46, height: 46, borderRadius: 23 },
   avatarText: { fontSize: 18, fontWeight: '700', color: '#64748B' },
+  
   cardContent: { flex: 1 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   cardName: { fontSize: 16, fontWeight: '700', color: THEME.colors.textMain },
@@ -822,12 +841,13 @@ const styles = StyleSheet.create({
   cardType: { fontSize: 12, color: THEME.colors.textSub, textTransform: 'capitalize', marginLeft: 4, fontWeight: '500' },
   dotSeparator: { marginHorizontal: 6, color: '#CBD5E1', fontSize: 10 },
   cardTime: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
-  callBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 10, shadowColor: THEME.colors.primary, shadowOpacity: 0.3, shadowRadius: 8 },
   
+  // Made Call/Heart buttons flat to match the new normal style
+  callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: THEME.colors.primary, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
   heartBtn: { padding: 8, justifyContent: 'center', alignItems: 'center' },
 
-  inlineAdContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', marginHorizontal: 20, marginBottom: 8, padding: 10, borderRadius: 18, borderWidth: 1, borderColor: '#FEF3C7', elevation: 1 },
-  inlineAdImageWrap: { width: 46, height: 46, borderRadius: 12, overflow: 'hidden', marginRight: 14 },
+  inlineAdContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: THEME.colors.border },
+  inlineAdImageWrap: { width: 46, height: 46, borderRadius: 23, overflow: 'hidden', marginRight: 14 },
   inlineAdImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   inlineAdContent: { flex: 1 },
   adLabelBoxMicro: { backgroundColor: '#F59E0B', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, marginRight: 6 },
@@ -856,7 +876,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 60, opacity: 0.7 },
   emptyText: { color: '#94A3B8', fontSize: 16, marginTop: 10, fontWeight: '500' },
 
-  // 🟢 NEW BEAUTIFUL BOTTOM SHEET MODAL STYLES
   modalOverlayBottomSheet: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   bottomSheetModal: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 40 },
   sheetHandle: { width: 40, height: 4, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20, borderRadius: 2 },

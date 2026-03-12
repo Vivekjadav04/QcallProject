@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, Platform
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Autolink from 'react-native-autolink'; // 🟢 IMPORTED AUTOLINK HERE
 
 const { DefaultSmsModule } = NativeModules;
 
@@ -42,11 +43,9 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState(''); 
   const [isSending, setIsSending] = useState(false);
   
-  // 🚀 THE FIX: We will track the exact pixel height of the keyboard
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    // 🚀 THE FIX: Listen directly to OS keyboard events to push the screen up
     const showListener = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideListener = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
@@ -136,7 +135,17 @@ export default function ChatScreen() {
     return (
       <View style={[styles.row, isMe ? styles.rowRight : styles.rowLeft]}>
         <View style={[styles.bubble, isMe ? styles.bubbleRight : styles.bubbleLeft, item.isPending && { opacity: 0.6 }]}>
-          <Text style={[styles.text, isMe ? styles.textRight : styles.textLeft]}>{item.body}</Text>
+          
+          {/* 🟢 REPLACED STANDARD TEXT WITH AUTOLINK */}
+          <Autolink
+            text={item.body}
+            style={[styles.text, isMe ? styles.textRight : styles.textLeft]}
+            linkStyle={{ color: '#3B82F6', textDecorationLine: 'underline', fontWeight: '600' }}
+            url={true}
+            phone={true}
+            email={true}
+          />
+          
           <View style={styles.metaContainer}>
             <Text style={[styles.time, isMe ? styles.timeRight : styles.timeLeft]}>{time}</Text>
             {isMe && <Ionicons name={item.isPending ? "time-outline" : "checkmark-done"} size={14} color={item.isPending ? "rgba(0,0,0,0.4)" : "#6366F1"} style={{marginLeft: 4}} />}
@@ -176,7 +185,6 @@ export default function ChatScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <StickyHeader />
       
-      {/* 🚀 THE FIX: We apply the dynamic keyboard height directly as paddingBottom to a standard View */}
       <View style={[styles.flex1, { paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0 }]}>
         {loading ? <ChatSkeleton /> : (
           <FlatList 

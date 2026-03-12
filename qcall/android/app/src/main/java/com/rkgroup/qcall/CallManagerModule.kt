@@ -480,11 +480,13 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
+    // 🟢 NEW: Upgraded to handle Photo Replacement during Edit!
     @ReactMethod
-    fun updateContactNative(contactId: String, firstName: String, lastName: String, phone: String, promise: Promise) {
+    fun updateContactNative(contactId: String, firstName: String, lastName: String, phone: String, photoBase64: String?, promise: Promise) {
         try {
             val ops = ArrayList<ContentProviderOperation>()
 
+            // 1. Update Name
             val nameSelection = "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?"
             val nameArgs = arrayOf(contactId, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
             ops.add(ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI)
@@ -493,12 +495,47 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
                 .withValue(ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME, lastName)
                 .build())
 
+            // 2. Update Phone
             val phoneSelection = "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?"
             val phoneArgs = arrayOf(contactId, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
             ops.add(ContentProviderOperation.newUpdate(ContactsContract.Data.CONTENT_URI)
                 .withSelection(phoneSelection, phoneArgs)
                 .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
                 .build())
+
+            // 3. Handle Photo Replacement
+            if (!photoBase64.isNullOrEmpty()) {
+                val decodedByte = Base64.decode(photoBase64, Base64.DEFAULT)
+                
+                // Delete existing photo first
+                val photoSelection = "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?"
+                val photoArgsDelete = arrayOf(contactId, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                ops.add(ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
+                    .withSelection(photoSelection, photoArgsDelete)
+                    .build())
+                
+                // Get Raw ID to insert new photo
+                val rawCursor = reactApplicationContext.contentResolver.query(
+                    ContactsContract.RawContacts.CONTENT_URI,
+                    arrayOf(ContactsContract.RawContacts._ID),
+                    "${ContactsContract.RawContacts.CONTACT_ID} = ?",
+                    arrayOf(contactId), null
+                )
+                
+                var rawId = ""
+                if (rawCursor != null && rawCursor.moveToFirst()) {
+                    rawId = rawCursor.getString(0)
+                    rawCursor.close()
+                }
+                
+                if (rawId.isNotEmpty()) {
+                    ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValue(ContactsContract.Data.RAW_CONTACT_ID, rawId)
+                        .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                        .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, decodedByte)
+                        .build())
+                }
+            }
 
             reactApplicationContext.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
             promise.resolve(true)
@@ -518,20 +555,7 @@ class CallManagerModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    @ReactMethod
-    fun editContactNative(contactId: String, promise: Promise) {
-        try {
-            val uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contactId)
-            val intent = Intent(Intent.ACTION_EDIT).apply {
-                data = uri
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            reactApplicationContext.startActivity(intent)
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("EDIT_ERROR", e.message)
-        }
-    }
+    // 🟢 REMOVED editContactNative because we don't need Google's editor anymore!
 
     @ReactMethod
     fun exportContactsNative(promise: Promise) {
